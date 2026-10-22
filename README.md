@@ -26,16 +26,16 @@ Privát proof of concept a **claude.ai** magyar nyelvű hangos használatához. 
 
 ## Telepítés: asztali Chrome
 
-1. Töltsd le a repó gyökerében található **[Claude-Voice-Bridge-v0.1.0.zip](Claude-Voice-Bridge-v0.1.0.zip)** fájlt, és csomagold ki.
+1. Töltsd le a repó gyökerében található **[Claude-Voice-Bridge-v0.2.0.zip](Claude-Voice-Bridge-v0.2.0.zip)** fájlt, és csomagold ki. A korábbi, Quettán már ellenőrzött **[v0.1.0](Claude-Voice-Bridge-v0.1.0.zip)** változat megmarad.
 2. Chrome: `chrome://extensions` → **Developer mode** → **Load unpacked** → a kicsomagolt projekt mappája.
 3. A bővítmény **Beállítások** lapján add meg a saját [Gemini API-kulcsodat](https://aistudio.google.com/apikey).
 4. Nyisd meg a `https://claude.ai/` oldalt egy bejelentkezett munkamenetben.
-5. A jobb alsó sarokban a **Beszéd indítása** gombbal kezdd el, majd ugyanezzel zárd le a felvételt. A leirat vagy automatikusan elküldésre kerül, vagy jóváhagyásra vár a beállításodtól függően.
+5. A jobb alsó sarokban a **Beszéd indítása** gombbal kezdd el a kézi módot, majd ugyanezzel zárd le a felvételt. A kéz nélküli módhoz egyszer nyomd meg az **Automata: ki** gombot. A leirat vagy automatikusan elküldésre kerül, vagy jóváhagyásra vár a beállításodtól függően.
 6. A Claude válasza után megindul a hangos felolvasás. A **Stop** gomb leállítja, az **Ismétlés** újra felolvassa.
 
 ## Android: Quetta (kísérleti)
 
-A Quetta megfelelő verziója alatt a repó gyökeréből letölthető **[Claude-Voice-Bridge-v0.1.0.zip](Claude-Voice-Bridge-v0.1.0.zip)** fájlt töltsd be a saját bővítménykezelőjében. A Chrome Androidon nem támogatja a hagyományos bővítményeket. A Quetta **MV3 service worker, getUserMedia, API-hívások és autoplay** kompatibilitása egyelőre nincs ellenőrizve. Használatkor a Quetta maradjon előtérben, és a kijelző bekapcsolva.
+A Quettában a **[Claude-Voice-Bridge-v0.2.0.zip](Claude-Voice-Bridge-v0.2.0.zip)** fájlt töltsd be a saját bővítménykezelőjében. A Chrome Androidon nem támogatja a hagyományos bővítményeket. A Quetta **MV3 service worker, getUserMedia, API-hívások és autoplay** kompatibilitása egyelőre nincs ellenőrizve. Használatkor a Quetta maradjon előtérben, és a kijelző bekapcsolva.
 
 ## Fő funkciók
 
