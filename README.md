@@ -8,7 +8,7 @@ Privát proof of concept a **claude.ai** magyar nyelvű hangos használatához. 
 
 ## Telepítés: asztali Chrome
 
-1. Töltsd le a projektet ZIP-ként a GitHubon (Code → Download ZIP), és csomagold ki.
+1. Töltsd le a repó gyökerében található **[Claude-Voice-Bridge-v0.1.0.zip](Claude-Voice-Bridge-v0.1.0.zip)** fájlt, és csomagold ki.
 2. Chrome: `chrome://extensions` → **Developer mode** → **Load unpacked** → a kicsomagolt projekt mappája.
 3. A bővítmény **Beállítások** lapján add meg a saját [Gemini API-kulcsodat](https://aistudio.google.com/apikey).
 4. Nyisd meg a `https://claude.ai/` oldalt egy bejelentkezett munkamenetben.
@@ -17,7 +17,7 @@ Privát proof of concept a **claude.ai** magyar nyelvű hangos használatához. 
 
 ## Android: Quetta (kísérleti)
 
-A Quetta megfelelő verziója alatt ZIP-ként töltsd be a bővítményt a saját bővítménykezelőjében. A Chrome Androidon nem támogatja a hagyományos bővítményeket. A Quetta **MV3 service worker, getUserMedia, API-hívások és autoplay** kompatibilitása egyelőre nincs ellenőrizve. Használatkor a Quetta maradjon előtérben, és a kijelző bekapcsolva.
+A Quetta megfelelő verziója alatt a repó gyökeréből letölthető **[Claude-Voice-Bridge-v0.1.0.zip](Claude-Voice-Bridge-v0.1.0.zip)** fájlt töltsd be a saját bővítménykezelőjében. A Chrome Androidon nem támogatja a hagyományos bővítményeket. A Quetta **MV3 service worker, getUserMedia, API-hívások és autoplay** kompatibilitása egyelőre nincs ellenőrizve. Használatkor a Quetta maradjon előtérben, és a kijelző bekapcsolva.
 
 ## Fő funkciók
 
