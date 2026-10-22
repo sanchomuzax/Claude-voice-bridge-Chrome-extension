@@ -1,48 +1,59 @@
-name: Test and build installable VAD extension
+name: Tesztelés és GitHub Release
 on:
   push:
-    paths-ignore:
-      - 'Claude-Voice-Bridge-v0.3.1.zip'
-      - 'dist/**'
-      - 'vendor/**'
+    branches: [main, "feature/**", "fix/**"]
   pull_request:
   workflow_dispatch:
-
 permissions:
   contents: write
-
 jobs:
   verify-build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
-          persist-credentials: true
+          fetch-depth: 0
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-      - run: npm install --ignore-scripts --no-audit --no-fund
+      - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run check
+      - run: npm run audit:secrets
       - run: npm run build
       - run: npm run pack
-      - name: Verify ZIP
+      - name: ZIP integritás
         run: |
-          unzip -t Claude-Voice-Bridge-v0.3.1.zip
+          VERSION=$(node -p "require('./package.json').version")
+          ZIP="Claude-Voice-Bridge-v$VERSION.zip"
+          unzip -t "$ZIP"
           test -s vendor/silero_vad_v5.onnx
           test -s vendor/vad.worklet.bundle.min.js
-          test -s dist/vad-bundle.js
       - uses: actions/upload-artifact@v4
         with:
-          name: Claude-Voice-Bridge-v0.3.1
-          path: Claude-Voice-Bridge-v0.3.1.zip
+          name: "Claude-Voice-Bridge-${{ github.sha }}"
+          path: Claude-Voice-Bridge-v*.zip
           if-no-files-found: error
-      - name: Store installable ZIP and offline model files in repository
-        if: github.event_name == 'push'
+      - name: Automatikus kiadás a GitHub Releases menüben
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
         run: |
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f package-lock.json dist/vad-bundle.js vendor Claude-Voice-Bridge-v0.3.1.zip
-          if ! git diff --cached --quiet; then
-            git commit -m "build: bundle offline Silero model and v0.3.0 ZIP [skip ci]"
-            git push origin "HEAD:${GITHUB_REF_NAME}"
+          set -euo pipefail
+          VERSION=$(node -p "require('./package.json').version")
+          ZIP="Claude-Voice-Bridge-v$VERSION.zip"
+          TAG="v$VERSION"
+          NOTES=".github/release-notes/$TAG.md"
+          if ! gh release view "$TAG" >/dev/null 2>&1; then
+            gh release create "$TAG" "$ZIP" --target "$GITHUB_SHA" --title "Claude Voice Bridge $TAG" --notes-file "$NOTES" --latest
           fi
+          while IFS="|" read -r OLD SHA DESC; do
+            FILE="Claude-Voice-Bridge-$OLD.zip"
+            if [[ -s "$FILE" ]] && ! gh release view "$OLD" >/dev/null 2>&1; then
+              gh release create "$OLD" "$FILE" --target "$SHA" --title "Claude Voice Bridge $OLD" --notes "$DESC" --latest=false
+            fi
+          done <<'RELEASES'
+          v0.1.0|5c5557a24382a18433a433d8ae98f885fcfaf546|Első magyar STT/TTS és kézi mikrofonkezelés a claude.ai webes felületén.
+          v0.2.0|594ab9a82551a605cb7989d02dc38fc91adf4bda|Silero VAD, automata beszédvég-érzékelés, half-duplex feldolgozás és helyi ONNX/WASM modell.
+          v0.3.0|f5802ba99b1f9fee0866b5f16f0723e2b61eb715|Claude-dizájn, becsukható panel, hangjelzések, csúszkák és Google modell-/hanglista.
+          v0.3.1|9882efdac687a574ca1052c4b8f62127a3feee4d|A becsukott mobilpanel füle lejjebb került.
+          RELEASES
