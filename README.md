@@ -1,10 +1,28 @@
 # Claude Voice Bridge
 
+## v0.2.0 kéz nélküli mód (fejlesztési változat)
+
+- **Automata: be/ki** gomb a claude.ai oldalán. Első aktiváláskor a helyi **Silero VAD v5** betöltődik az ONNX/WASM csomagból.
+- Kb. **1,2 másodperc csend** után automatikus leirat és üzenetküldés; a küszöb a beállításokban **700 és 2500 ms** között állítható.
+- **Half-duplex**: a VAD szünetel a Gemini STT, Claude-válasz és Gemini TTS teljes ideje alatt. A válasz felolvasása után újra hallgat.
+- Megerősítéses módban a **„küldd”** vagy **„töröld”** hangparancs használható. A felolvasás megismétlésére az **„ismételd”**, kikapcsolásra a **„vége”** parancs szolgál.
+- Induláskor mindig **kikapcsolt**. A korábbi kézi push-to-talk mód változatlanul megmarad. Mikrofonnal kapcsolatos hiba esetén kézi módra lehet visszatérni.
+- **Nem autós használatra hitelesített.** A Quetta ONNX/WASM és audio-worklet támogatását valódi eszközön még ellenőrizni kell. A munkamenet a böngésző előterében működik, háttérben nem garantált.
+- **Fontos:** a régi v0.1.0 ZIP nem tartalmazza a Silero modellt. A kéz nélküli módhoz a **[Claude-Voice-Bridge-v0.2.0.zip](Claude-Voice-Bridge-v0.2.0.zip)** telepítése szükséges. Ez a fájl a GitHub Actions sikeres buildje után jelenik meg.
+
+### Fejlesztői build
+
+Node.js 20+ és npm szükséges, egyszeri `npm install`, majd `npm run check`, `npm run build`, `npm run pack`. A build az összes felhasznált ONNX-modellt, audio-workletet és WASM/MJS runtime-fájlt a csomagba másolja. Futás közben semmilyen CDN-kódot nem tölt be.
+
+---
+
+
+
 Privát proof of concept a **claude.ai** magyar nyelvű hangos használatához. Manifest V3 Chrome-bővítmény, amely a Claude webes munkamenetét használja, és **Gemini 3.5 Transcribe** segítségével készít leiratot, **Gemini 3.8 Flash-Lite TTS** segítségével olvassa fel a választ. Nincs Claude API-hívás és nincs szükség külön szerverre.
 
 ## Állapot
 
-**v0.1.0, push-to-talk MVP.** Az alapfunkciók meg vannak írva; a claude.ai aktuális felületén, Gemini API-kulccsal, illetve Android/Quetta alatt végponttól végpontig még tesztelendő. **A kéz nélküli VAD, a vezetés közbeni használat és a kormánygombvezérlés még nincsenek kész.**
+**v0.1.0, push-to-talk MVP igazolt Quettán a felhasználó által; v0.2.0 Silero kódja elkészült, Quetta-tesztelésre vár.** Az alapfunkciók meg vannak írva; a claude.ai aktuális felületén, Gemini API-kulccsal, illetve Android/Quetta alatt végponttól végpontig még tesztelendő. **A kormánygombvezérlés és az autós használat még nincsen kész, az automatikus VAD Quetta-tesztje hátravan.**
 
 ## Telepítés: asztali Chrome
 
@@ -30,9 +48,9 @@ A Quetta megfelelő verziója alatt a repó gyökeréből letölthető **[Claude
 - Napi STT-perc és TTS-karakter kvóta, állítható modell, hang, STT-szótár.
 - Az API-hívások csak a felhasználó által elindított felvétel vagy felolvasás után indulnak.
 
-## Nem része az MVP-nek
+## Nem része a v0.2.0-nak
 
-Silero VAD, folyamatos hallgatás, beszéd alapú közbevágás, Bluetooth kormánygomb, sidePanel, bekezdésenkénti élő TTS, vakon működő autós üzemmód. A részletes továbbfejlesztési ütemterv a `docs/ROADMAP.md` fájlban található.
+Beszéd alapú közbevágás TTS közben, Bluetooth kormánygomb, sidePanel, bekezdésenkénti élő TTS, vezetés közbeni ellenőrzött autós üzemmód. A részletes továbbfejlesztési ütemterv a `docs/ROADMAP.md` fájlban található.
 
 ## Biztonság és adatvédelem
 
