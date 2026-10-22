@@ -4,7 +4,7 @@ const BASE="https://generativelanguage.googleapis.com";
 const defaults={
   sttModel:"gemini-3.5-transcribe",ttsModel:"gemini-3.8-flash-lite-tts",
   voice:"Kore",style:"Nyugodt, természetes magyar beszéd, közepes tempó.",
-  sendMode:"auto",maxMinutes:30,maxChars:20000,vocabulary:"Claude\nGemini\nQuetta"
+  sendMode:"auto",silenceMs:1200,maxMinutes:30,maxChars:20000,vocabulary:"Claude\nGemini\nQuetta"
 };
 const exposed=Object.keys(defaults);
 const day=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Europe/Budapest",year:"numeric",month:"2-digit",day:"2-digit"});
