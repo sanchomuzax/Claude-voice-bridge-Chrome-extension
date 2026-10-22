@@ -1,0 +1,295 @@
+/* Claude Voice Bridge: claude.ai UI and audio capture.
+ * Requires shared.js; Gemini key is NEVER transferred to this content script.
+ */
+(() => {
+"use strict";
+if(window.__claudeVoiceBridgeLoaded)return;
+window.__claudeVoiceBridgeLoaded=true;
+const s={phase:"idle",selectors:{},configured:false,sendMode:"auto",stream:null,recorder:null,
+ chunks:[],started:0,autoTimer:null,wakeLock:null,pending:false,transcript:"",
+ lastAnswer:"",audio:null,audioUrl:null,playToken:0,rate:1,lastSpoken:"",
+ activeWait:null};
+const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+const message=(type,data={})=>new Promise((resolve,reject)=>{
+  chrome.runtime.sendMessage({type,...data},response=>{
+    if(chrome.runtime.lastError)return reject(new Error(chrome.runtime.lastError.message));
+    if(!response?.ok)return reject(new Error(response?.error||"A háttérszolgáltatás nem válaszol."));
+    resolve(response);
+  });
+});
+const wrapper=document.createElement("div");
+wrapper.id="claude-voice-bridge";
+wrapper.style.cssText="position:fixed;z-index:2147483646;right:12px;bottom:12px;max-width:calc(100vw - 24px);font-size:14px";
+const shadow=wrapper.attachShadow({mode:"closed"});
+shadow.innerHTML='<style>:host{all:initial}#panel{box-sizing:border-box;background:#14283a;color:#f2f7fc;width:282px;max-width:calc(100vw - 24px);border:1px solid #82a0b2;border-radius:15px;padding:12px;box-shadow:0 4px 25px #0006;font:13px/1.4 system-ui,sans-serif}h3{font:700 14px system-ui;margin:0 0 7px}#status{min-height:38px;white-space:pre-wrap;overflow-wrap:anywhere}#transcript{max-height:76px;overflow-y:auto;white-space:pre-wrap;color:#cbe0f5;font-size:12px;margin:5px 0}#actions{display:flex;flex-wrap:wrap;gap:5px}button{font:600 12px system-ui;border:0;border-radius:8px;padding:8px 9px;background:#95e5c8;color:#03291c;cursor:pointer}button.secondary{background:#314960;color:#fff}button:disabled{opacity:.5;cursor:default}button:focus-visible{outline:3px solid #fff}small{display:block;color:#b2c5d7;margin-top:7px}</style><section id="panel" aria-label="Claude Voice Bridge"><h3>Claude Voice Bridge</h3><div id="status" role="status" aria-live="polite">Indítás…</div><div id="transcript"></div><div id="actions"><button id="record">Beszéd indítása</button><button id="send" class="secondary" disabled>Küldés</button><button id="stop" class="secondary" disabled>Stop</button><button id="repeat" class="secondary" disabled>Ismétlés</button><button id="settings" class="secondary" title="Beállítások">⚙</button></div><small id="hint">A mikrofon gomb második megnyomása lezárja a felvételt.</small></section>';
+(document.body||document.documentElement).appendChild(wrapper);
+const $=id=>shadow.getElementById(id);
+function setStatus(text,phase=s.phase){
+  s.phase=phase; $("status").textContent=text;
+  $("record").textContent=phase==="recording"?"Felvétel lezárása":"Beszéd indítása";
+  $("record").disabled=["transcribing","sending","waiting"].includes(phase);
+  $("send").disabled=!s.pending;
+  $("stop").disabled=phase!=="playing";
+  $("repeat").disabled=!s.lastAnswer||phase==="recording";
+}
+function issue(error){setStatus("Hiba: "+String(error?.message||error).slice(0,240),"idle");}
+function visible(el){return !!(el?.isConnected&&el.getClientRects().length&&getComputedStyle(el).visibility!=="hidden");}
+function bySelector(type){
+  for(const selector of s.selectors[type]||[]){
+    try{const el=[...document.querySelectorAll(selector)].find(visible);if(el)return el;}catch{}
+  }
+  return null;
+}
+function editor(){
+  for(const selector of s.selectors.editor||[]){
+    try{const el=[...document.querySelectorAll(selector)].find(e=>visible(e)&&e.isContentEditable);
+      if(el)return el;
+    }catch{}
+  }
+  return null;
+}
+function sendButton(){
+  for(const selector of s.selectors.send||[]){
+    try{const el=[...document.querySelectorAll(selector)].find(e=>visible(e)&&!e.disabled);
+      if(el)return el;
+    }catch{}
+  }
+  return null;
+}
+function assistantElements(){
+  for(const selector of s.selectors.assistant||[]){
+    try{
+      const nodes=[...document.querySelectorAll(selector)].filter(visible);
+      if(nodes.length)return nodes;
+    }catch{}
+  }
+  return [];
+}
+function assistantText(){
+  const latest=assistantElements().at(-1);
+  if(!latest)return "";
+  const el=latest.cloneNode(true);
+  el.querySelectorAll("pre,code,button,script,style,[data-testid*='thinking'],[data-testid*='tool'],[aria-label*='Copy']").forEach(node=>node.remove());
+  return (el.textContent||"").replace(/\n{3,}/g,"\n\n").trim();
+}
+async function init(){
+  try{
+    const cfg=await message("GET_SETTINGS");
+    s.configured=cfg.configured;
+    s.sendMode=cfg.settings.sendMode;
+    s.selectors=await fetch(chrome.runtime.getURL("selectors.json")).then(r=>r.json());
+    if(!s.configured)setStatus("A Gemini API-kulcs nincs beállítva. Nyisd meg a ⚙ menüt.","idle");
+    else if(!editor())setStatus("A Claude szerkesztő nem található. Nyiss meg egy beszélgetést.","idle");
+    else setStatus("Készen áll. Indíthatod a beszédet.","idle");
+  }catch(error){issue(error);}
+}
+async function lockScreen(){
+  try{if("wakeLock" in navigator)s.wakeLock=await navigator.wakeLock.request("screen");}catch{}
+}
+async function unlockScreen(){
+  try{await s.wakeLock?.release();}catch{}
+  s.wakeLock=null;
+}
+function releaseMicrophone(){
+  if(s.autoTimer)clearTimeout(s.autoTimer);
+  s.autoTimer=null;
+  if(s.stream){s.stream.getTracks().forEach(t=>t.stop());s.stream=null;}
+  void unlockScreen();
+}
+async function startRecord(){
+  if(!s.configured){setStatus("Előbb add meg a Gemini API-kulcsot.","idle");return;}
+  if(s.phase==="playing")stopSpeech();
+  if(s.recorder?.state==="recording")return;
+  if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==="undefined")throw new Error("Ezen a böngészőn nincs MediaRecorder/getUserMedia támogatás.");
+  const stream=await navigator.mediaDevices.getUserMedia({
+    audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
+  });
+  const mime=["audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus","audio/mp4"].find(x=>MediaRecorder.isTypeSupported(x));
+  if(!mime){stream.getTracks().forEach(t=>t.stop());throw new Error("Nincs támogatott hangfelvételi formátum.");}
+  const recorder=new MediaRecorder(stream,{mimeType:mime});
+  s.stream=stream;s.recorder=recorder;s.chunks=[];s.started=Date.now();
+  recorder.ondataavailable=event=>{if(event.data?.size)s.chunks.push(event.data);};
+  recorder.onerror=()=>issue(new Error("A hangrögzítés megszakadt."));
+  recorder.onstop=()=>{releaseMicrophone();void processRecorded(mime).catch(issue);};
+  recorder.start(1000);
+  void lockScreen();
+  s.autoTimer=setTimeout(()=>{if(recorder.state==="recording")recorder.stop();},120000);
+  setStatus("Felvétel. Beszélj magyarul, majd nyomd meg ismét a gombot.","recording");
+}
+function finishRecord(){
+  if(s.recorder?.state!=="recording")return;
+  s.recorder.stop();
+  setStatus("Leirat készül a Geminivel…","transcribing");
+}
+function blobBase64(blob){
+  return new Promise((resolve,reject)=>{
+    const reader=new FileReader();
+    reader.onerror=()=>reject(new Error("A hangfelvétel nem olvasható."));
+    reader.onload=()=>resolve(String(reader.result).split(",")[1]);
+    reader.readAsDataURL(blob);
+  });
+}
+async function processRecorded(mime){
+  const seconds=(Date.now()-s.started)/1000;
+  if(seconds<0.5){setStatus("A felvétel túl rövid. Próbáld újra.","idle");return;}
+  const blob=new Blob(s.chunks,{type:mime});
+  s.chunks=[];
+  const data=await blobBase64(blob);
+  const {transcript}=await message("TRANSCRIBE",{duration:Math.min(seconds,120),mime,data});
+  $("transcript").textContent="Felismert: "+transcript;
+  const command=CVB.speechCommand(transcript);
+  if(command){
+    await handleCommand(command);
+    return;
+  }
+  putTranscript(transcript);
+  s.transcript=transcript;s.pending=true;
+  if(s.sendMode==="confirm")setStatus("Ellenőrizd a leiratot, majd nyomd meg a Küldés gombot.","idle");
+  else await sendTranscript();
+}
+function putTranscript(text){
+  const node=editor();
+  if(!node)throw new Error("A beviteli mező nem található. A leirat nincs elküldve.");
+  node.focus();
+  const selection=window.getSelection();
+  const range=document.createRange();
+  range.selectNodeContents(node);range.collapse(false);
+  selection.removeAllRanges();selection.addRange(range);
+  const old=node.textContent?.trim();
+  const inserted=document.execCommand("insertText",false,(old?"\n":"")+text);
+  if(!inserted)throw new Error("A szerkesztő elutasította a szövegbeszúrást.");
+  node.dispatchEvent(new InputEvent("input",{bubbles:true,inputType:"insertText",data:text}));
+}
+async function sendTranscript(){
+  if(!s.pending)return;
+  const button=await (async()=>{for(let i=0;i<10;i++){const b=sendButton();if(b)return b;await sleep(150);}return null;})();
+  if(!button){setStatus("Nem található aktív Küldés gomb. A leirat a szerkesztőben maradt.","idle");return;}
+  const baseline=assistantText();
+  const count=assistantElements().length;
+  s.pending=false;
+  button.click();
+  setStatus("Claude válaszára várok…","waiting");
+  await monitorAnswer(baseline,count);
+}
+async function monitorAnswer(baseline,count){
+  if(s.activeWait){s.activeWait.disconnect();s.activeWait=null;}
+  const started=Date.now();
+  let last="";let changedAt=Date.now();let reported=false;
+  return new Promise((resolve,reject)=>{
+    const obs=new MutationObserver(update);
+    s.activeWait=obs;
+    const ticker=setInterval(update,500);
+    function cleanup(){
+      obs.disconnect();clearInterval(ticker);
+      if(s.activeWait===obs)s.activeWait=null;
+    }
+    function update(){
+      if(!wrapper.isConnected){cleanup();resolve();return;}
+      const now=Date.now();
+      if(now-started>600000){cleanup();reject(new Error("Claude 10 perc alatt sem fejezte be a választ."));return;}
+      if(now-started>180000&&!reported){reported=true;setStatus("Claude még dolgozik. Tovább várok…","waiting");}
+      const elements=assistantElements();
+      const text=assistantText();
+      const fresh=(elements.length>count||text!==baseline)&&text.length>0;
+      if(!fresh)return;
+      if(last!==text){last=text;changedAt=now;return;}
+      const stop=bySelector("stop");
+      if(stop)return;
+      if(now-changedAt>=1300){
+        cleanup();s.lastAnswer=text;resolve();
+        void speak(text).catch(issue);
+      }
+    }
+    obs.observe(document.body,{subtree:true,childList:true,characterData:true});
+    update();
+  });
+}
+function clearAudio(){
+  if(s.audio){s.audio.pause();s.audio.src="";s.audio=null;}
+  if(s.audioUrl){URL.revokeObjectURL(s.audioUrl);s.audioUrl=null;}
+}
+function stopSpeech(){
+  s.playToken++;clearAudio();
+  if("speechSynthesis" in window)speechSynthesis.cancel();
+  setStatus("Felolvasás leállítva.","idle");
+}
+function decodeAudio(base64,mime){
+  const bytes=atob(base64);
+  const arr=new Uint8Array(bytes.length);
+  for(let i=0;i<bytes.length;i++)arr[i]=bytes.charCodeAt(i);
+  return new Blob([arr],{type:mime||"audio/wav"});
+}
+async function playBlob(blob,token){
+  if(token!==s.playToken)return;
+  clearAudio();
+  s.audioUrl=URL.createObjectURL(blob);
+  const audio=new Audio(s.audioUrl);
+  s.audio=audio;audio.playbackRate=s.rate;
+  await new Promise(async(resolve,reject)=>{
+    audio.onended=resolve;audio.onerror=()=>reject(new Error("A böngésző nem tudja lejátszani a hangot."));
+    try{await audio.play();}catch(error){reject(error);}
+  });
+  clearAudio();
+}
+function fallbackSpeak(text,token){
+  return new Promise((resolve,reject)=>{
+    if(!("speechSynthesis" in window))return reject(new Error("A böngészőben nincs beépített TTS."));
+    const utterance=new SpeechSynthesisUtterance(text);
+    utterance.lang="hu-HU";utterance.rate=s.rate;
+    utterance.onend=resolve;utterance.onerror=()=>resolve();
+    if(token!==s.playToken)return resolve();
+    speechSynthesis.speak(utterance);
+  });
+}
+async function speak(raw){
+  stopSpeech();
+  const token=s.playToken;
+  const parts=CVB.splitForTts(raw,500).slice(0,60);
+  if(!parts.length){setStatus("Nem található felolvasható szöveg.","idle");return;}
+  setStatus("Felolvasás…","playing");
+  for(const part of parts){
+    if(token!==s.playToken)return;
+    try{
+      const output=await message("SYNTHESIZE",{text:part});
+      if(token!==s.playToken)return;
+      await playBlob(decodeAudio(output.data,output.mime),token);
+    }catch(error){
+      if(token!==s.playToken)return;
+      setStatus("Gemini TTS-hiba, beépített felolvasás: "+String(error?.message||error).slice(0,90),"playing");
+      await fallbackSpeak(part,token);
+    }
+  }
+  if(token===s.playToken)setStatus("Válasz felolvasva. Indíthatod a következő beszédet.","idle");
+}
+async function handleCommand(command){
+  if(command==="send"){
+    if(s.pending)await sendTranscript();
+    else setStatus("Nincs elküldésre váró leirat.","idle");
+  }else if(command==="clear"){
+    if(s.pending){setStatus("A leiratot kézzel töröld a Claude szerkesztőjéből, a program nem írja felül.","idle");}
+    else setStatus("Nincs függő leirat.","idle");
+  }else if(command==="repeat"){
+    if(s.lastAnswer)await speak(s.lastAnswer);
+  }else if(command==="stop")stopSpeech();
+  else if(command==="end"){stopSpeech();setStatus("Hangos mód kikapcsolva.","idle");}
+  else if(command==="slower"||command==="faster"){
+    s.rate=Math.max(0.7,Math.min(1.4,s.rate+(command==="faster"?0.15:-0.15)));
+    setStatus("Felolvasás tempója: "+Math.round(s.rate*100)+"%.","idle");
+  }
+}
+async function toggleRecord(){
+  try{if(s.phase==="recording")finishRecord();else await startRecord();}
+  catch(error){releaseMicrophone();issue(error);}
+}
+$("record").addEventListener("click",()=>{void toggleRecord();});
+$("send").addEventListener("click",()=>{void sendTranscript().catch(issue);});
+$("stop").addEventListener("click",stopSpeech);
+$("repeat").addEventListener("click",()=>{void speak(s.lastAnswer).catch(issue);});
+$("settings").addEventListener("click",()=>{void message("OPEN_OPTIONS").catch(issue);});
+chrome.runtime.onMessage.addListener((request,sender,reply)=>{
+  if(request?.type==="TOGGLE_RECORD"){void toggleRecord();reply({ok:true});}
+  if(request?.type==="STOP_SPEECH"){stopSpeech();reply({ok:true});}
+});
+window.addEventListener("pagehide",()=>{releaseMicrophone();clearAudio();});
+void init();
+})();
