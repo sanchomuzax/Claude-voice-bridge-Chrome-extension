@@ -39,7 +39,8 @@ test("MV3 includes local VAD script and vendor resources",()=>{
 test("VAD remains opt-in and speech capture has explicit UI control",()=>{
  const src=fs.readFileSync(path.join(__dirname,"..","content.js"),"utf8");
  assert.ok(src.includes("enabled:false,starting:false"));
- assert.ok(src.includes("id=\"hands\""));
+ const panel=fs.readFileSync(path.join(__dirname,"..","panel-ui.js"),"utf8");
+ assert.ok(panel.includes("id=")&&panel.includes("hands"));
  assert.ok(src.includes("await pauseHands()"));
  assert.ok(src.includes("await resumeHands(generation)"));
  assert.ok(src.includes("Silero VAD"));
