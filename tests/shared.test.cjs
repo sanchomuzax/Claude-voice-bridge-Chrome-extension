@@ -60,3 +60,13 @@ test("v0.3 UI, model lists and audio cues are wired",()=>{
  assert.match(options,/ai\.google\.dev\/gemini-api\/docs\/pricing|prices=/);
  assert.match(panel,/Zajküszöb/);
 });
+
+test("collapsed handle sits below Claude toolbar on Quetta",()=>{
+ const root=require("node:path").join(__dirname,"..");
+ const content=require("node:fs").readFileSync(root+"/content.js","utf8");
+ const fn=content.slice(content.indexOf("function applyCollapsed(value)"),content.indexOf("function showSliderValues()"));
+ assert.match(fn,/wrapper\.style\.top=value/);
+ assert.match(fn,/\+ 76px/);
+ assert.match(fn,/\+ 8px/);
+ assert.match(fn,/aria-expanded/);
+});
