@@ -21,9 +21,7 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: '22'
-          cache: npm
-          cache-dependency-path: package-lock.json
-      - run: npm ci --ignore-scripts --no-audit --no-fund
+      - run: npm install --ignore-scripts --no-audit --no-fund
       - run: npm run check
       - run: npm run build
       - run: npm run pack
@@ -43,7 +41,7 @@ jobs:
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f dist/vad-bundle.js vendor Claude-Voice-Bridge-v0.2.0.zip
+          git add -f package-lock.json dist/vad-bundle.js vendor Claude-Voice-Bridge-v0.2.0.zip
           if ! git diff --cached --quiet; then
             git commit -m "build: bundle offline Silero model and v0.2.0 ZIP [skip ci]"
             git push origin "HEAD:${GITHUB_REF_NAME}"
