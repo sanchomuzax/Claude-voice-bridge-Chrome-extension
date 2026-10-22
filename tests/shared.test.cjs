@@ -70,3 +70,15 @@ test("collapsed handle sits below Claude toolbar on Quetta",()=>{
  assert.match(fn,/\+ 8px/);
  assert.match(fn,/aria-expanded/);
 });
+
+test("TTS preview has stop gesture, pressed state and local playback",()=>{
+ const fs=require("node:fs"),path=require("node:path"),root=path.join(__dirname,"..");
+ const opts=fs.readFileSync(path.join(root,"options.js"),"utf8");
+ const html=fs.readFileSync(path.join(root,"options.html"),"utf8");
+ assert.match(html,/id="previewTts"/);
+ assert.match(opts,/PREVIEW_TTS/);
+ assert.match(opts,/aria-pressed/);
+ assert.match(opts,/previewAudio\.pause/);
+ assert.match(opts,/previewEpoch\+\+/);
+ assert.match(opts,/határozott tempó/);
+});
