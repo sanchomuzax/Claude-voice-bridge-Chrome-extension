@@ -207,7 +207,8 @@ async function updateUiSettings(values){
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   if(!message||typeof message.type!=="string")return;
   const page=String(sender.url||sender.tab?.url||"");
-  const allowed=page.startsWith("https://claude.ai/")||(sender.id===chrome.runtime.id&&!sender.tab);
+  const isExtension=sender.id===chrome.runtime.id&&page.startsWith(chrome.runtime.getURL(""));
+  const allowed=page.startsWith("https://claude.ai/")||isExtension;
   if(!allowed){respond({ok:false,error:"Nem engedélyezett hívó."});return;}
   (async()=>{
     if(message.type==="GET_SETTINGS"){
@@ -215,7 +216,7 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
       return {settings:Object.fromEntries(exposed.map(k=>[k,config[k]])),configured:!!config.apiKey};
     }
     if(message.type==="GET_STATUS")return {usage:await getUsage()};
-    if(message.type==="GET_CATALOG"&&!sender.tab)return officialCatalog();
+    if(message.type==="GET_CATALOG"&&isExtension)return officialCatalog();
     if(message.type==="UPDATE_UI_SETTINGS"&&page.startsWith("https://claude.ai/"))return updateUiSettings(message.values);
     if(message.type==="OPEN_OPTIONS"){await chrome.runtime.openOptionsPage();return{};}
     if(message.type==="TRANSCRIBE"&&page.startsWith("https://claude.ai/"))return transcribe(message);
