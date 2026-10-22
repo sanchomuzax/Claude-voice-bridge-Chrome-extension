@@ -1,0 +1,57 @@
+{
+  "manifest_version": 3,
+  "name": "Claude Voice Bridge",
+  "version": "0.1.0",
+  "description": "Privát magyar beszélgetés a claude.ai webes felületén Gemini STT/TTS segítségével.",
+  "permissions": [
+    "storage",
+    "activeTab"
+  ],
+  "host_permissions": [
+    "https://generativelanguage.googleapis.com/*"
+  ],
+  "action": {
+    "default_title": "Claude Voice Bridge",
+    "default_popup": "popup.html"
+  },
+  "options_page": "options.html",
+  "background": {
+    "service_worker": "background.js"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "https://claude.ai/*"
+      ],
+      "js": [
+        "shared.js",
+        "content.js"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "selectors.json"
+      ],
+      "matches": [
+        "https://claude.ai/*"
+      ]
+    }
+  ],
+  "commands": {
+    "toggle-recording": {
+      "suggested_key": {
+        "default": "Alt+Shift+V"
+      },
+      "description": "Felvétel indítása/leállítása"
+    },
+    "stop-speech": {
+      "suggested_key": {
+        "default": "Alt+Shift+S"
+      },
+      "description": "Felolvasás leállítása"
+    }
+  }
+}
