@@ -1,84 +1,53 @@
 # Claude Voice Bridge
 
-## v0.3.1 • becsukott oldalsó fül pozíciója
+**Magyar hangos beszélgetés a Claude webes felületén, Gemini beszédfelismeréssel és felolvasással.**
 
-- A becsukott oldalsó nyíl **68 px-szel lejjebb** kerül Android/Quetta alatt, hogy ne lógjon rá a Claude beszélgetésének felső sávjára. Nyitott állapotban a panel továbbra is a képernyő tetejéhez igazodik.
-- **Quetta ZIP-frissítés:** a ZIP-ként betöltött bővítményeket a Quetta nem feltétlenül frissíti helyben, az aktuális készüléken a korábbi változatot külön ki kell kapcsolni vagy el kell távolítani. **Ha eltávolítod**, a bővítményben tárolt Gemini-kulcs és beállítások elveszhetnek. Előbb jegyezd fel az API-kulcsot/beszédstílust, vagy csak kapcsold ki az előző példányt. Az egyszerre aktív példányok párhuzamosan illesztik be a panelt.
-- A [v0.3.1 ZIP](Claude-Voice-Bridge-v0.3.1.zip) mellett a korábbi kiadások visszaállításhoz megmaradnak. A Quetta ZIP-importnál nincs általunk igazolt, helyben működő automatikus frissítési mód. Stabil extension ID-val aláírt CRX / áruházas terjesztés külön fejlesztés, ez még nincs kész.
+A Claude Voice Bridge egy böngészőbővítmény a [claude.ai](https://claude.ai/) használatához. A mikrofonról felvett magyar beszédet a Google Gemini alakítja szöveggé, a bővítmény elküldi a Claude webes felületén, majd a választ magyarul felolvassa. **Nem használ Claude API-t.**
 
----
+![A Claude Voice Bridge androidos kezelőpaneljének képernyőképe](docs/images/player-Quetta.webp)
 
-## v0.3.0 • Claude panel, hangjelzések és modellkatalógus
+*A kezelőpanel Quetta böngészőben. A képről a személyes beszélgetéstartalmat eltávolítottuk.*
 
-- A panel a **jobb felső sarokban**, keskeny oldalsó fogantyúval becsukható és kinyitható. A bezárt állapot megmarad újratöltés után.
-- A Claude világos/sötét rendszermegjelenítéséhez igazodó színek, a Claude oldaláról örökölt betűtípus (ha a böngésző elérhetővé teszi).
-- Két diszkrét hangjelzés: hallgatás kezdete (emelkedő), feldolgozás kezdete (mélyülő). Bekapcsolás külön állítható.
-- Két közvetlen csúszka: a Silero **zajküszöbe** és a beszéd utáni **csend** időtartama. Aktív automata módban a Silero újraindul a beállítás frissítéséhez.
-- A Gemini modell- és hanglistát a Google API szolgáltatja a saját kulcsoddal; a modellnevek mellett **dátumozott hivatalos árak** jelennek meg, nem kitalált API-áradatok. Ha az API nem válaszol, a dokumentált alaplista jelenik meg, figyelmeztetéssel.
-- A TTS már a Claude válaszának látható szövegrészét olvassa, a rendszer felületi címkéit és a megismételt kezdőmondatot kiszűri.
+## Mire képes?
 
-**Telepítés Quettába:** [Claude-Voice-Bridge-v0.3.1.zip](Claude-Voice-Bridge-v0.3.1.zip). A v0.1.0 és v0.2.0 archívumok megmaradnak.
+- Magyar hangbevitel Gemini 3.5 Transcribe modellel.
+- A Claude válaszának felolvasása Gemini 3.8 TTS modellekkel.
+- Kézi mikrofonvezérlés vagy bekapcsolható, helyi **Silero VAD** beszédvég-érzékelés.
+- Becsukható, a jobb felső sarokban megjelenő Claude-stílusú panel, világos és sötét megjelenéssel.
+- Két diszkrét hangjelzés a hallgatás és a feldolgozás kezdetéhez.
+- Zajküszöb és beszédvégi csend állítása csúszkával.
+- A hivatalos Google API-ból lekért modellek és hangok, tájékoztató díjakkal.
+- **TTS-próba** a beállításokban: a megadott beszédstílust olvassa fel az éppen kiválasztott hanggal; második koppintásra leáll.
+- Napi helyi STT-perc- és TTS-karakterkorlát, automatikus vagy jóváhagyásos üzenetküldés.
 
----
+## Telepítés
 
-## v0.2.0 kéz nélküli mód (fejlesztési változat)
+A mindenkori telepíthető ZIP a **[GitHub Releases](https://github.com/sanchomuzax/Claude-voice-bridge-Chrome-extension/releases/latest)** oldalról tölthető le, a *Assets* részben. A ZIP-ben a szükséges ONNX és WASM fájlok is megtalálhatók, így a VAD nem tölt be külső futtatható kódot.
 
-- **Automata: be/ki** gomb a claude.ai oldalán. Első aktiváláskor a helyi **Silero VAD v5** betöltődik az ONNX/WASM csomagból.
-- Kb. **1,2 másodperc csend** után automatikus leirat és üzenetküldés; a küszöb a beállításokban **700 és 2500 ms** között állítható.
-- **Half-duplex**: a VAD szünetel a Gemini STT, Claude-válasz és Gemini TTS teljes ideje alatt. A válasz felolvasása után újra hallgat.
-- Megerősítéses módban a **„küldd”** vagy **„töröld”** hangparancs használható. A felolvasás megismétlésére az **„ismételd”**, kikapcsolásra a **„vége”** parancs szolgál.
-- Induláskor mindig **kikapcsolt**. A korábbi kézi push-to-talk mód változatlanul megmarad. Mikrofonnal kapcsolatos hiba esetén kézi módra lehet visszatérni.
-- **Nem autós használatra hitelesített.** A Quetta ONNX/WASM és audio-worklet támogatását valódi eszközön még ellenőrizni kell. A munkamenet a böngésző előterében működik, háttérben nem garantált.
-- **Fontos:** a régi v0.1.0 ZIP nem tartalmazza a Silero modellt. A kéz nélküli módhoz a **[Claude-Voice-Bridge-v0.3.1.zip](Claude-Voice-Bridge-v0.2.0.zip)** telepítése szükséges. Ez a fájl a GitHub Actions sikeres buildje után jelenik meg.
+**Android / Quetta:** a Quetta bővítménykezelőjében ZIP-bővítményként töltsd be a csomagot. A Quetta a manuálisan betöltött ZIP helybeni frissítését nem minden verzióban támogatja: előfordulhat, hogy a régi példányt ki kell kapcsolni vagy el kell távolítani. Törlés előtt őrizd meg a saját API-kulcsodat és beállításaidat, mert a helyi tároló törlődhet.
 
-### Fejlesztői build
+**Asztali Chrome:** csomagold ki a ZIP-et, majd `chrome://extensions` → *Fejlesztői mód* → *Kicsomagolt bővítmény betöltése*. A Chrome androidos kiadása önmagában nem támogatja ezt a telepítési módot.
 
-Node.js 20+ és npm szükséges, egyszeri `npm install`, majd `npm run check`, `npm run build`, `npm run pack`. A build az összes felhasznált ONNX-modellt, audio-workletet és WASM/MJS runtime-fájlt a csomagba másolja. Futás közben semmilyen CDN-kódot nem tölt be.
+## Használat
 
----
+1. A bővítmény beállításaiban add meg a [Google AI Studio](https://aistudio.google.com/apikey) felületén kapott saját Gemini API-kulcsodat.
+2. Nyisd meg bejelentkezve a `claude.ai` oldalt, és válassz vagy indíts beszélgetést.
+3. Kézi módban nyomd meg a **Beszéd indítása** gombot, majd a rögzítés végén ismét.
+4. Kéz nélküli módban kapcsold be az **Automata** módot. A Silero a beszéd utáni csendet érzékeli, a mikrofon a válasz felolvasása közben szünetel.
+5. Az oldalsó nyíllal a panel becsukható és kinyitható. A zajküszöb és a csendidő közvetlenül a panelen is állítható.
 
+A **Beállítások → Beszédstílus** sor jobb oldalán található lejátszás ikon az aktuális stílus szövegével készít TTS-tesztet. Amíg a gomb aktív, újbóli megnyomással megszakíthatod a próbát. A teszt a Google API-használatba beleszámít.
 
+## Adatvédelem és korlátok
 
-Privát proof of concept a **claude.ai** magyar nyelvű hangos használatához. Manifest V3 Chrome-bővítmény, amely a Claude webes munkamenetét használja, és **Gemini 3.5 Transcribe** segítségével készít leiratot, **Gemini 3.8 Flash-Lite TTS** segítségével olvassa fel a választ. Nincs Claude API-hívás és nincs szükség külön szerverre.
+A Gemini API-kulcsot a bővítmény helyben, elkülönített tárolóban kezeli, nem része a forráskódnak. A hangfelvétel és a felolvasásra elküldött szöveg a Google Gemini szolgáltatásához kerül. A Claude beszélgetése a bejelentkezett webes munkamenetben történik. Érzékeny adatokkal a prototípust ne használd.
 
-## Állapot
+A bővítmény nem hivatalos Anthropic- vagy Google-termék. A Claude felületének változása megszakíthatja a működését. Az Android/Quetta automatikus VAD és a háttérben működés nem minden készüléken igazolt, vezetés közbeni használatra nem hitelesített. A helyi keretek **nem garantált számlázási limitek**.
 
-**v0.1.0, push-to-talk MVP igazolt Quettán a felhasználó által; v0.2.0 Silero kódja elkészült, Quetta-tesztelésre vár.** Az alapfunkciók meg vannak írva; a claude.ai aktuális felületén, Gemini API-kulccsal, illetve Android/Quetta alatt végponttól végpontig még tesztelendő. **A kormánygombvezérlés és az autós használat még nincsen kész, az automatikus VAD Quetta-tesztje hátravan.**
+## Fejlesztőknek
 
-## Telepítés: asztali Chrome
+Node.js 20+, `npm install`, `npm run check`, `npm run build`, `npm run pack`. A GitHub Actions minden módosításnál teszteli és csomagolja a bővítményt, a kiadásokat pedig a **Releases** menüpont kezeli. Az előző kiadások változáslistáját a megfelelő Release leírásában találod.
 
-1. Töltsd le a repó gyökerében található **[Claude-Voice-Bridge-v0.2.0.zip](Claude-Voice-Bridge-v0.2.0.zip)** fájlt, és csomagold ki. A korábbi, Quettán már ellenőrzött **[v0.1.0](Claude-Voice-Bridge-v0.1.0.zip)** változat megmarad.
-2. Chrome: `chrome://extensions` → **Developer mode** → **Load unpacked** → a kicsomagolt projekt mappája.
-3. A bővítmény **Beállítások** lapján add meg a saját [Gemini API-kulcsodat](https://aistudio.google.com/apikey).
-4. Nyisd meg a `https://claude.ai/` oldalt egy bejelentkezett munkamenetben.
-5. A jobb alsó sarokban a **Beszéd indítása** gombbal kezdd el a kézi módot, majd ugyanezzel zárd le a felvételt. A kéz nélküli módhoz egyszer nyomd meg az **Automata: ki** gombot. A leirat vagy automatikusan elküldésre kerül, vagy jóváhagyásra vár a beállításodtól függően.
-6. A Claude válasza után megindul a hangos felolvasás. A **Stop** gomb leállítja, az **Ismétlés** újra felolvassa.
+Felhasznált technológiák: [Silero VAD](https://github.com/snakers4/silero-vad), [@ricky0123/vad-web](https://github.com/ricky0123/vad), [ONNX Runtime Web](https://onnxruntime.ai/) és [Google Gemini API](https://ai.google.dev/gemini-api/docs).
 
-## Android: Quetta (kísérleti)
-
-A Quettában a **[Claude-Voice-Bridge-v0.2.0.zip](Claude-Voice-Bridge-v0.2.0.zip)** fájlt töltsd be a saját bővítménykezelőjében. A Chrome Androidon nem támogatja a hagyományos bővítményeket. A Quetta **MV3 service worker, getUserMedia, API-hívások és autoplay** kompatibilitása egyelőre nincs ellenőrizve. Használatkor a Quetta maradjon előtérben, és a kijelző bekapcsolva.
-
-## Fő funkciók
-
-- Mikrofonos felvétel (maximum 120 másodperc), háttérhang-feldolgozás a Google API-ján.
-- Gemini Files API feltöltés + Transcribe Interactions API (`gemini-3.5-transcribe`).
-- Gemini TTS Interactions API (`gemini-3.8-flash-lite-tts`) és magyar szöveg tisztítása felolvasáshoz.
-- Megerősítéses/automatikus küldési mód, nem üres szerkesztő tartalmának megőrzése.
-- Látható hibák DOM-változás esetén, stopper a hosszabb Claude-válaszra.
-- API-kulcs az extension helyi, tartalom-szkriptek elől korlátozott tárolójában.
-- Napi STT-perc és TTS-karakter kvóta, állítható modell, hang, STT-szótár.
-- Az API-hívások csak a felhasználó által elindított felvétel vagy felolvasás után indulnak.
-
-## Nem része a v0.2.0-nak
-
-Beszéd alapú közbevágás TTS közben, Bluetooth kormánygomb, sidePanel, bekezdésenkénti élő TTS, vezetés közbeni ellenőrzött autós üzemmód. A részletes továbbfejlesztési ütemterv a `docs/ROADMAP.md` fájlban található.
-
-## Biztonság és adatvédelem
-
-Az API-kulcsot **soha ne commitold**. A mikrofon felvétele és a felolvasandó Claude-válasz részletei a Google Gemini API-hoz kerülnek; a felvételeket a Files API kezeli, és a bővítmény a feldolgozás után törlést kér rájuk. A prototípust **ne használd érzékeny adatokkal**. A kvóták kizárólag helyi szoftveres korlátok, nem garantált számlázási limitek. Állíts be külön keretet a Google Cloudban. A felhasználó végzi a Claude bejelentkezést, a bővítmény nem tárol Claude-jelszót.
-
-## Tesztelés
-
-Nincs telepítendő JS-függőség. Node.js 20+ alatt: `node --test tests/*.test.cjs`. A GitHub Actions is futtatja az egységteszteket.
-
-API-dokumentáció: [Gemini Transcription](https://ai.google.dev/gemini-api/docs/transcribe), [Gemini Files API](https://ai.google.dev/gemini-api/docs/files), [Gemini TTS](https://ai.google.dev/gemini-api/docs/speech-generation).
+Licenc: [MIT](LICENSE). A külső összetevők saját licenceit a [harmadik féltől származó összetevők](THIRD_PARTY_NOTICES.md) dokumentum tartalmazza.
