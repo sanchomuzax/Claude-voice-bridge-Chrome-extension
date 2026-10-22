@@ -3,7 +3,7 @@
 const BASE="https://generativelanguage.googleapis.com";
 const defaults={
   sttModel:"gemini-3.5-transcribe",ttsModel:"gemini-3.8-flash-lite-tts",
-  voice:"Kore",style:"Nyugodt, természetes magyar beszéd, közepes tempó.",
+  voice:"Kore",style:"Nyugodt, természetes magyar beszéd, határozott tempó.",
   sendMode:"auto",silenceMs:1200,vadThreshold:0.62,soundCues:true,panelCollapsed:false,maxMinutes:30,maxChars:20000,vocabulary:"Claude\nGemini\nQuetta"
 };
 const exposed=Object.keys(defaults);
@@ -126,19 +126,25 @@ function readAudio(data){
   }
   return null;
 }
-async function synthesize(message){
+async function synthesize(message, preview=false){
   const config=await settings();
   if(!config.apiKey)throw new Error("Hiányzik a Gemini API-kulcs.");
-  if(!/^[a-zA-Z0-9._-]{4,100}$/.test(config.ttsModel))throw new Error("Érvénytelen TTS modellnév.");
+  const model=preview?String(message.ttsModel||""):config.ttsModel;
+  const voice=preview?String(message.voice||""):config.voice;
+  const style=preview?String(message.style||""):config.style;
+  // Preview is available only to the extension's own options UI.
+  if(!/^[a-zA-Z0-9._-]{4,100}$/.test(model)||!/^gemini-3\.8-[\w.-]+-tts$/.test(model))
+    throw new Error("Érvénytelen TTS modellnév.");
+  if(!/^[a-zA-Z0-9_-]{2,110}$/.test(voice))throw new Error("Érvénytelen hangazonosító.");
   const sentence=String(message.text||"").trim();
   if(!sentence||sentence.length>600)throw new Error("Üres vagy túl hosszú felolvasandó szöveg.");
   const used=await getUsage();
   if(used.chars+sentence.length>Number(config.maxChars))throw new Error("Elérted a napi TTS-karakterkorlátot.");
   const result=await postJson("interactions",config.apiKey,{
-    model:config.ttsModel,
-    input:[{type:"user_input",content:[{type:"text",text:sentence,annotations:[{type:"speech_metadata",style:String(config.style||"").slice(0,200)}]}]}],
+    model,
+    input:[{type:"user_input",content:[{type:"text",text:sentence,annotations:[{type:"speech_metadata",style:String(style||"").slice(0,200)}]}]}],
     response_format:{type:"audio"},
-    generation_config:{speech_config:[{voice:String(config.voice||"Kore").slice(0,100)}]}
+    generation_config:{speech_config:[{voice}]}
   });
   const audio=readAudio(result);
   if(!audio?.data)throw new Error("Gemini TTS nem adott hangot.");
@@ -217,6 +223,11 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
     }
     if(message.type==="GET_STATUS")return {usage:await getUsage()};
     if(message.type==="GET_CATALOG"&&isExtension)return officialCatalog();
+    if(message.type==="PREVIEW_TTS"&&isExtension){
+      const text=String(message.text||"").trim();
+      if(text.length>200)throw new Error("A stíluspróba legfeljebb 200 karakteres lehet.");
+      return synthesize({text,ttsModel:message.ttsModel,voice:message.voice,style:message.style},true);
+    }
     if(message.type==="UPDATE_UI_SETTINGS"&&page.startsWith("https://claude.ai/"))return updateUiSettings(message.values);
     if(message.type==="OPEN_OPTIONS"){await chrome.runtime.openOptionsPage();return{};}
     if(message.type==="TRANSCRIBE"&&page.startsWith("https://claude.ai/"))return transcribe(message);
