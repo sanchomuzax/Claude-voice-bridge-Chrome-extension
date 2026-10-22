@@ -80,13 +80,18 @@ function assistantText(){
   const roots=candidates.filter((element,index)=>candidates.findIndex(other=>other===element)===index &&
     !candidates.some(other=>other!==element&&other.contains(element)));
   const content=roots.length?roots:[latest];
-  return content.map(el=>{
-    const clone=el.cloneNode(true);
-    clone.querySelectorAll("pre,code,button,script,style,.sr-only,[aria-hidden='true'],[data-testid*='thinking'],[data-testid*='tool'],[aria-label*='Copy']").forEach(node=>node.remove());
-    // innerText on live markdown is more faithful to visible text than a
-    // container's textContent. The clone path removes hidden descendants.
-    return roots.length?(el.innerText||clone.textContent||""):(clone.textContent||"");
-  }).join("\n\n").replace(/^\s*Claude\s+(?:responded|response)\s*[:\-–]?\s*/i,"").replace(/\n{3,}/g,"\n\n").trim();
+  const forbidden="button,script,style,pre,code,svg,.sr-only,[aria-hidden='true'],[data-testid*='thinking'],[data-testid*='tool'],[aria-label*='Copy']";
+  function rendered(node){
+    if(node.nodeType===Node.TEXT_NODE)return node.textContent||"";
+    if(node.nodeType!==Node.ELEMENT_NODE)return "";
+    if(node.matches(forbidden))return "";
+    const tag=node.tagName;
+    const text=[...node.childNodes].map(rendered).join("");
+    return /^(P|DIV|SECTION|H1|H2|H3|H4|LI|BLOCKQUOTE|TR)$/.test(tag)?text+"\n":text;
+  }
+  return content.map(rendered).join("\n")
+    .replace(/^\s*Claude\s+(?:responded|response)\s*[:\-–]?\s*/i,"")
+    .replace(/[ \t]+\n/g,"\n").replace(/\n{3,}/g,"\n\n").trim();
 }
 
 async function init(){
