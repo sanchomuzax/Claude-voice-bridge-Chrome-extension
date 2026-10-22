@@ -24,7 +24,12 @@ jobs:
       - run: npm run check
       - run: npm run audit:secrets
       - run: npm run build
-      - run: npm run pack
+      - name: Telepíthető csomag létrehozása
+        id: archive
+        run: |
+          npm run pack
+          VERSION=$(node -p "require('./package.json').version")
+          echo "name=Claude-Voice-Bridge-v$VERSION.zip" >> "$GITHUB_OUTPUT"
       - name: ZIP integritás
         run: |
           VERSION=$(node -p "require('./package.json').version")
@@ -35,7 +40,7 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: "Claude-Voice-Bridge-${{ github.sha }}"
-          path: Claude-Voice-Bridge-v*.zip
+          path: ${{ steps.archive.outputs.name }}
           if-no-files-found: error
       - name: Automatikus kiadás a GitHub Releases menüben
         if: github.event_name == 'push' && github.ref == 'refs/heads/main'
@@ -53,7 +58,9 @@ jobs:
           while IFS="|" read -r OLD SHA DESC; do
             FILE="Claude-Voice-Bridge-$OLD.zip"
             if [[ -s "$FILE" ]] && ! gh release view "$OLD" >/dev/null 2>&1; then
-              gh release create "$OLD" "$FILE" --target "$SHA" --title "Claude Voice Bridge $OLD" --notes "$DESC" --latest=false
+              if ! gh release create "$OLD" "$FILE" --target "$SHA" --title "Claude Voice Bridge $OLD" --notes "$DESC" --latest=false; then
+                echo "::warning::Régebbi Release most nem hozható létre: $OLD. Az archivált ZIP megmarad a repóban."
+              fi
             fi
           done <<'RELEASES'
           v0.1.0|5c5557a24382a18433a433d8ae98f885fcfaf546|Első magyar STT/TTS és kézi mikrofonkezelés a claude.ai webes felületén.
@@ -61,3 +68,17 @@ jobs:
           v0.3.0|f5802ba99b1f9fee0866b5f16f0723e2b61eb715|Claude-dizájn, becsukható panel, hangjelzések, csúszkák és Google modell-/hanglista.
           v0.3.1|9882efdac687a574ca1052c4b8f62127a3feee4d|A becsukott mobilpanel füle lejjebb került.
           RELEASES
+      - name: Repo About / Topics / publikus láthatóság (jogosultság esetén)
+        if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh api --method PATCH "repos/$GITHUB_REPOSITORY" -f description="Magyar hangos Claude-chat Gemini STT/TTS és Silero VAD segítségével." -f homepage="https://github.com/sanchomuzax/Claude-voice-bridge-Chrome-extension/releases/latest" >/dev/null; then
+            echo "::warning::A GitHub Actions token nem jogosult a repo About módosítására. Tulajdonosi Settings szükséges."
+          fi
+          if ! printf '{"names":["claude","gemini","chrome-extension","quetta","hungarian","speech-to-text","text-to-speech","silero-vad"]}' | gh api --method PUT "repos/$GITHUB_REPOSITORY/topics" -H "Accept: application/vnd.github+json" --input - >/dev/null; then
+            echo "::warning::A topics szerkesztéséhez tulajdonosi jogosultság kell."
+          fi
+          if ! gh api --method PATCH "repos/$GITHUB_REPOSITORY" -f visibility=public >/dev/null; then
+            echo "::warning::A repó nyilvánossá tételéhez a tulajdonos GitHub Settings / Danger Zone művelete szükséges."
+          fi
