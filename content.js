@@ -359,6 +359,7 @@ async function enableHandsFree(){
     const vad=await globalThis.CVBSilero.MicVAD.new({
       model:"v5",
       processorType:"auto",
+      startOnLoad:false,
       baseAssetPath:chrome.runtime.getURL("vendor/"),
       onnxWASMBasePath:chrome.runtime.getURL("vendor/"),
       positiveSpeechThreshold:0.62,
