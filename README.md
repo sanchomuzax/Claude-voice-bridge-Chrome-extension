@@ -1,5 +1,13 @@
 # Claude Voice Bridge
 
+## v0.3.1 • becsukott oldalsó fül pozíciója
+
+- A becsukott oldalsó nyíl **68 px-szel lejjebb** kerül Android/Quetta alatt, hogy ne lógjon rá a Claude beszélgetésének felső sávjára. Nyitott állapotban a panel továbbra is a képernyő tetejéhez igazodik.
+- **Quetta ZIP-frissítés:** a ZIP-ként betöltött bővítményeket a Quetta nem feltétlenül frissíti helyben, az aktuális készüléken a korábbi változatot külön ki kell kapcsolni vagy el kell távolítani. **Ha eltávolítod**, a bővítményben tárolt Gemini-kulcs és beállítások elveszhetnek. Előbb jegyezd fel az API-kulcsot/beszédstílust, vagy csak kapcsold ki az előző példányt. Az egyszerre aktív példányok párhuzamosan illesztik be a panelt.
+- A [v0.3.1 ZIP](Claude-Voice-Bridge-v0.3.1.zip) mellett a korábbi kiadások visszaállításhoz megmaradnak. A Quetta ZIP-importnál nincs általunk igazolt, helyben működő automatikus frissítési mód. Stabil extension ID-val aláírt CRX / áruházas terjesztés külön fejlesztés, ez még nincs kész.
+
+---
+
 ## v0.3.0 • Claude panel, hangjelzések és modellkatalógus
 
 - A panel a **jobb felső sarokban**, keskeny oldalsó fogantyúval becsukható és kinyitható. A bezárt állapot megmarad újratöltés után.
@@ -9,7 +17,7 @@
 - A Gemini modell- és hanglistát a Google API szolgáltatja a saját kulcsoddal; a modellnevek mellett **dátumozott hivatalos árak** jelennek meg, nem kitalált API-áradatok. Ha az API nem válaszol, a dokumentált alaplista jelenik meg, figyelmeztetéssel.
 - A TTS már a Claude válaszának látható szövegrészét olvassa, a rendszer felületi címkéit és a megismételt kezdőmondatot kiszűri.
 
-**Telepítés Quettába:** [Claude-Voice-Bridge-v0.3.0.zip](Claude-Voice-Bridge-v0.3.0.zip). A v0.1.0 és v0.2.0 archívumok megmaradnak.
+**Telepítés Quettába:** [Claude-Voice-Bridge-v0.3.1.zip](Claude-Voice-Bridge-v0.3.1.zip). A v0.1.0 és v0.2.0 archívumok megmaradnak.
 
 ---
 
@@ -21,7 +29,7 @@
 - Megerősítéses módban a **„küldd”** vagy **„töröld”** hangparancs használható. A felolvasás megismétlésére az **„ismételd”**, kikapcsolásra a **„vége”** parancs szolgál.
 - Induláskor mindig **kikapcsolt**. A korábbi kézi push-to-talk mód változatlanul megmarad. Mikrofonnal kapcsolatos hiba esetén kézi módra lehet visszatérni.
 - **Nem autós használatra hitelesített.** A Quetta ONNX/WASM és audio-worklet támogatását valódi eszközön még ellenőrizni kell. A munkamenet a böngésző előterében működik, háttérben nem garantált.
-- **Fontos:** a régi v0.1.0 ZIP nem tartalmazza a Silero modellt. A kéz nélküli módhoz a **[Claude-Voice-Bridge-v0.3.0.zip](Claude-Voice-Bridge-v0.2.0.zip)** telepítése szükséges. Ez a fájl a GitHub Actions sikeres buildje után jelenik meg.
+- **Fontos:** a régi v0.1.0 ZIP nem tartalmazza a Silero modellt. A kéz nélküli módhoz a **[Claude-Voice-Bridge-v0.3.1.zip](Claude-Voice-Bridge-v0.2.0.zip)** telepítése szükséges. Ez a fájl a GitHub Actions sikeres buildje után jelenik meg.
 
 ### Fejlesztői build
 
