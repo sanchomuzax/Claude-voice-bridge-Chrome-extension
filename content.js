@@ -348,7 +348,7 @@ async function disableHandsFree(){
 }
 async function enableHandsFree(){
   if(!s.configured)throw new Error("Előbb add meg a Gemini API-kulcsot.");
-  if(s.phase==="recording"||s.phase==="transcribing"||s.phase==="waiting"||s.pending)
+  if(["recording","transcribing","waiting","playing"].includes(s.phase)||s.pending)
     throw new Error("Előbb fejezd be a folyamatban lévő kört.");
   if(!globalThis.CVBSilero?.MicVAD||!globalThis.CVBWav?.pcm16WavBase64)
     throw new Error("Hiányzik a helyi Silero modell/bundle. Telepítsd a teljes v0.2.0 ZIP-et.");
