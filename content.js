@@ -518,6 +518,13 @@ function playCue(which){
 }
 function applyCollapsed(value){
   wrapper.dataset.collapsed=String(value);
+  // Quetta Android renders the Claude conversation toolbar directly below
+  // the browser chrome. Shift only the collapsed handle 68 px lower so it
+  // does not cover the conversation title, share and navigation controls.
+  // Keep the expanded drawer top-anchored as requested.
+  wrapper.style.top=value
+    ?"calc(env(safe-area-inset-top, 0px) + 76px)"
+    :"calc(env(safe-area-inset-top, 0px) + 8px)";
   const button=$("toggle");
   button.textContent=value?"›":"‹";
   button.setAttribute("aria-expanded",String(!value));

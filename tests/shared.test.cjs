@@ -49,7 +49,7 @@ test("v0.3 UI, model lists and audio cues are wired",()=>{
  const options=require("node:fs").readFileSync(root+"/options.js","utf8");
  const manifest=JSON.parse(require("node:fs").readFileSync(root+"/manifest.json","utf8"));
  assert.ok(manifest.content_scripts[0].js.includes("panel-ui.js"));
- assert.equal(manifest.version,"0.3.0");
+ assert.equal(manifest.version,"0.3.1");
  assert.match(content,/wrapper\.dataset\.collapsed/);
  assert.match(content,/playCue\("process"\)/);
  assert.match(content,/playCue\("listen"\)/);
@@ -59,4 +59,14 @@ test("v0.3 UI, model lists and audio cues are wired",()=>{
  assert.match(background,/UPDATE_UI_SETTINGS/);
  assert.match(options,/ai\.google\.dev\/gemini-api\/docs\/pricing|prices=/);
  assert.match(panel,/Zajküszöb/);
+});
+
+test("collapsed handle sits below Claude toolbar on Quetta",()=>{
+ const root=require("node:path").join(__dirname,"..");
+ const content=require("node:fs").readFileSync(root+"/content.js","utf8");
+ const fn=content.slice(content.indexOf("function applyCollapsed(value)"),content.indexOf("function showSliderValues()"));
+ assert.match(fn,/wrapper\.style\.top=value/);
+ assert.match(fn,/\+ 76px/);
+ assert.match(fn,/\+ 8px/);
+ assert.match(fn,/aria-expanded/);
 });

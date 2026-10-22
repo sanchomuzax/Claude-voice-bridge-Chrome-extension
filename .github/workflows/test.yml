@@ -2,7 +2,7 @@ name: Test and build installable VAD extension
 on:
   push:
     paths-ignore:
-      - 'Claude-Voice-Bridge-v0.3.0.zip'
+      - 'Claude-Voice-Bridge-v0.3.1.zip'
       - 'dist/**'
       - 'vendor/**'
   pull_request:
@@ -27,21 +27,21 @@ jobs:
       - run: npm run pack
       - name: Verify ZIP
         run: |
-          unzip -t Claude-Voice-Bridge-v0.3.0.zip
+          unzip -t Claude-Voice-Bridge-v0.3.1.zip
           test -s vendor/silero_vad_v5.onnx
           test -s vendor/vad.worklet.bundle.min.js
           test -s dist/vad-bundle.js
       - uses: actions/upload-artifact@v4
         with:
-          name: Claude-Voice-Bridge-v0.3.0
-          path: Claude-Voice-Bridge-v0.3.0.zip
+          name: Claude-Voice-Bridge-v0.3.1
+          path: Claude-Voice-Bridge-v0.3.1.zip
           if-no-files-found: error
       - name: Store installable ZIP and offline model files in repository
         if: github.event_name == 'push'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f package-lock.json dist/vad-bundle.js vendor Claude-Voice-Bridge-v0.3.0.zip
+          git add -f package-lock.json dist/vad-bundle.js vendor Claude-Voice-Bridge-v0.3.1.zip
           if ! git diff --cached --quiet; then
             git commit -m "build: bundle offline Silero model and v0.3.0 ZIP [skip ci]"
             git push origin "HEAD:${GITHUB_REF_NAME}"
