@@ -13,7 +13,7 @@ function makeWorker(respondFetch){
         set:async values=>Object.assign(store,values),
         setAccessLevel:async()=>{}
       }},
-      runtime:{onInstalled:{addListener:()=>{}},onStartup:{addListener:()=>{}},onMessage:{addListener:f=>{onMessage=f;}}},
+      runtime:{id:"test-extension",getURL:path=>"chrome-extension://test-extension/"+path,onInstalled:{addListener:()=>{}},onStartup:{addListener:()=>{}},onMessage:{addListener:f=>{onMessage=f;}}},
       commands:{onCommand:{addListener:()=>{}}},
       tabs:{query:async()=>[]}
     },
