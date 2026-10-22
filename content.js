@@ -264,12 +264,36 @@ async function speak(raw){
   }
   if(token===s.playToken)setStatus("Válasz felolvasva. Indíthatod a következő beszédet.","idle");
 }
+function clearPendingTranscript(){
+  const node=editor();
+  const target=s.transcript;
+  if(!node||!s.pending||!target||!(node.textContent||"").endsWith(target)){
+    throw new Error("A leirat megváltozott. Biztonsági okból nem törlöm a szerkesztőt.");
+  }
+  const walker=document.createTreeWalker(node,NodeFilter.SHOW_TEXT);
+  const leaves=[];
+  while(walker.nextNode())leaves.push(walker.currentNode);
+  let remaining=target.length,start=null;
+  for(let i=leaves.length-1;i>=0&&remaining>0;i--){
+    const t=leaves[i],take=Math.min(remaining,t.textContent.length);
+    remaining-=take;start={node:t,offset:t.textContent.length-take};
+  }
+  if(!start||remaining)throw new Error("Nem sikerült a leirat törlését előkészíteni.");
+  const last=leaves.at(-1),r=document.createRange();
+  r.setStart(start.node,start.offset);r.setEnd(last,last.textContent.length);
+  node.focus();
+  const selection=window.getSelection();selection.removeAllRanges();selection.addRange(r);
+  if(!document.execCommand("delete",false))throw new Error("A szerkesztő elutasította a törlést.");
+  s.pending=false;s.transcript="";
+  $("transcript").textContent="";
+  setStatus("A leirat törölve, a többi szöveg megmaradt.","idle");
+}
 async function handleCommand(command){
   if(command==="send"){
     if(s.pending)await sendTranscript();
     else setStatus("Nincs elküldésre váró leirat.","idle");
   }else if(command==="clear"){
-    if(s.pending){setStatus("A leiratot kézzel töröld a Claude szerkesztőjéből, a program nem írja felül.","idle");}
+    if(s.pending)clearPendingTranscript();
     else setStatus("Nincs függő leirat.","idle");
   }else if(command==="repeat"){
     if(s.lastAnswer)await speak(s.lastAnswer);
