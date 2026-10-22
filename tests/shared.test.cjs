@@ -31,3 +31,31 @@ test("MV3 manifest érvényes és engedélyei célzottak",()=>{
  assert.deepEqual(manifest.content_scripts[0].matches,["https://claude.ai/*"]);
  assert.ok(!manifest.permissions.includes("<all_urls>"));
 });
+
+test("TTS drops Claude screen-reader label from reply text",()=>{
+ assert.equal(cleanForSpeech("Claude responded\nSzia, itt vagyok."),"Szia, itt vagyok.");
+ assert.equal(cleanForSpeech("Claude response: Rendben."),"Rendben.");
+});
+test("TTS avoids doubling the leading sentence only",()=>{
+ assert.equal(cleanForSpeech("Ez egy bemutatkozó mondat. Ez egy bemutatkozó mondat. Folytatás."),
+   "Ez egy bemutatkozó mondat. Folytatás.");
+ assert.equal(cleanForSpeech("Ez az első mondat. Második mondat."),"Ez az első mondat. Második mondat.");
+});
+test("v0.3 UI, model lists and audio cues are wired",()=>{
+ const root=require("node:path").join(__dirname,"..");
+ const content=require("node:fs").readFileSync(root+"/content.js","utf8");
+ const background=require("node:fs").readFileSync(root+"/background.js","utf8");
+ const panel=require("node:fs").readFileSync(root+"/panel-ui.js","utf8");
+ const options=require("node:fs").readFileSync(root+"/options.js","utf8");
+ const manifest=JSON.parse(require("node:fs").readFileSync(root+"/manifest.json","utf8"));
+ assert.ok(manifest.content_scripts[0].js.includes("panel-ui.js"));
+ assert.equal(manifest.version,"0.3.0");
+ assert.match(content,/wrapper\.dataset\.collapsed/);
+ assert.match(content,/playCue\("process"\)/);
+ assert.match(content,/playCue\("listen"\)/);
+ assert.match(content,/clone\.querySelectorAll/);
+ assert.match(background,/GET_CATALOG/);
+ assert.match(background,/UPDATE_UI_SETTINGS/);
+ assert.match(options,/ai\.google\.dev\/gemini-api\/docs\/pricing|prices=/);
+ assert.match(panel,/Zajküszöb/);
+});
