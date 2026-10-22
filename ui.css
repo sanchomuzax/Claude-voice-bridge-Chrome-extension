@@ -1,1 +1,14 @@
-html{color-scheme:light dark}*{box-sizing:border-box}body{margin:0;min-width:310px;background:#142030;color:#edf5fa;font:15px/1.5 system-ui,sans-serif}main{max-width:650px;margin:auto;padding:22px}h1{font-size:24px}h2{font-size:18px}label{display:block;margin:10px 0}input,select,textarea{font:inherit;background:#263a52;color:#f5fafb;border:1px solid #78909f;border-radius:7px;padding:10px;display:block;width:100%}button{background:#92e0c7;color:#052d24;border:0;border-radius:7px;padding:10px 14px;margin:10px 8px 10px 0;font:600 14px system-ui;cursor:pointer}button:focus-visible{outline:3px solid white}.hint{color:#bcd1e0}#status{display:inline-block;min-height:20px}
+*{box-sizing:border-box}html{color-scheme:light dark}body{margin:0;background:#faf9f6;color:#292623;font:15px/1.48 system-ui,"Segoe UI",Arial,sans-serif}
+@media(prefers-color-scheme:dark){body{background:#242320;color:#f1ede6}section{background:#2f2d29!important;border-color:#544e48!important}input,select,textarea{background:#3b3833!important;color:#f1ede6!important;border-color:#6e645b!important}p.hint,a,output{color:#d6a18b!important}button.secondary{background:#3b3833!important;color:#f1ede6!important}header{border-color:#544e48!important}}
+main{max-width:660px;margin:auto;padding:20px 16px 36px}header{padding:14px 0 18px;border-bottom:1px solid #e3ddd5;margin-bottom:18px}
+.brand{display:flex;align-items:center;gap:12px}.glyph{display:grid;place-items:center;width:42px;height:42px;border-radius:11px;background:#d97757;color:white;font-size:22px}h1{font-size:21px;line-height:1.2;margin:0;letter-spacing:-.4px}h2{font-size:17px;margin:0 0 8px}p{margin:7px 0}header p,.hint{font-size:12px;color:#77716b}.hint{line-height:1.5}
+section{margin:14px 0;padding:18px;border:1px solid #e5ded7;border-radius:14px;background:#fffdf9}
+label{display:block;margin:15px 0 8px;font-size:13px;font-weight:600}
+input,select,textarea{display:block;width:100%;padding:10px 11px;border:1px solid #d8d1c7;background:#fff;color:#292623;border-radius:9px;font:14px system-ui;margin-top:7px;min-height:41px}
+input[type=range]{padding:0;border:0;accent-color:#d97757;background:transparent;min-height:24px;height:24px;cursor:pointer;touch-action:pan-x}
+input[type=checkbox]{width:17px;height:17px;min-height:0;margin:0;accent-color:#d97757}
+label.check{display:flex;align-items:center;gap:8px;font-weight:500}
+output{float:right;color:#b65f42;font-weight:700;font-variant-numeric:tabular-nums}
+button{background:#d97757;color:#fff;border:0;border-radius:10px;padding:11px 15px;font:600 13px system-ui;cursor:pointer;margin:8px 8px 8px 0}button.secondary{background:#f2ebe4;color:#38312e}button:focus-visible,input:focus-visible,select:focus-visible{outline:2px solid #d97757;outline-offset:2px}
+.price{margin-top:3px;color:#b65f42;font-weight:550;font-size:12px}.footer{display:flex;flex-wrap:wrap}.brand p{margin:2px 0}
+a{color:#b65f42}#catalogStatus,#status{min-height:20px;overflow-wrap:anywhere}
