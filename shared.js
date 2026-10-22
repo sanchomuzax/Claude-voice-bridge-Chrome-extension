@@ -12,6 +12,11 @@ function speechCommand(text) {
 }
 function cleanForSpeech(raw) {
   let text=String(raw||"");
+  // Do not read screen-reader chrome or a duplicated opening sentence.
+  // These can occur when Claude's response shell is accidentally included
+  // alongside the rendered Markdown in some versions of the web UI.
+  text=text.replace(/^\s*Claude\s+(?:responded|response)\s*[:\-–]?\s*/i,"");
+  text=text.replace(/^([^\n.!?]{12,220}[.!?])\s+\1(?=\s|$)/i,"$1");
   text=text.replace(/```[\s\S]*?```/g,"\nKódrészlet kihagyva.\n");
   text=text.replace(/\[([^\]]+)\]\(https?:\/\/[^)\s]+\)/g,"$1");
   text=text.replace(/https?:\/\/\S+/g,"");
