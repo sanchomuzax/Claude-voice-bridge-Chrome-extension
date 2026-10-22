@@ -1,28 +1,34 @@
 {
   "editor": [
+    "div.ProseMirror[contenteditable='true']",
     "[data-testid='chat-input'] [contenteditable='true']",
     "[data-testid='chat-input'][contenteditable='true']",
     "[contenteditable='true'][role='textbox']",
-    "div.ProseMirror[contenteditable='true']",
     "div[contenteditable='true'][data-placeholder]"
   ],
   "send": [
+    "button[data-testid='chat-input-send']",
     "button[data-testid='send-button']",
-    "button[aria-label='Send message']",
     "button[aria-label='Send Message']",
+    "button[aria-label='Send message']",
     "button[aria-label='Send']",
     "button[aria-label='Küldés']"
   ],
   "assistant": [
+    ".font-claude-response",
+    "[data-is-streaming] .font-claude-response",
     "[data-testid='assistant-message']",
-    "[data-message-author-role='assistant']",
-    "[data-testid='chat-message'] .font-claude-message",
-    "[data-testid='message'] [data-testid='assistant-message']"
+    "[data-testid='ai-message']",
+    ".font-claude-message",
+    "[data-is-streaming='false'] .standard-markdown",
+    "[data-is-streaming] .standard-markdown",
+    "[data-message-author-role='assistant']"
   ],
   "stop": [
     "button[data-testid='stop-button']",
     "button[aria-label='Stop response']",
     "button[aria-label='Stop generating']",
-    "button[aria-label='Stop']"
+    "button[aria-label='Stop']",
+    "button[title='Stop']"
   ]
 }
