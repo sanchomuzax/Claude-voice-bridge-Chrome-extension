@@ -8,8 +8,8 @@ window.__claudeVoiceBridgeLoaded=true;
 const s={phase:"idle",selectors:{},configured:false,sendMode:"auto",stream:null,recorder:null,
  chunks:[],started:0,autoTimer:null,wakeLock:null,pending:false,transcript:"",
  lastAnswer:"",audio:null,audioUrl:null,playToken:0,rate:1,lastSpoken:"",
- activeWait:null,audioEnd:null,fallbackEnd:null};
-const hands={enabled:false,starting:false,vad:null,busy:false,generation:0,silenceMs:1200,speechAt:0};
+ activeWait:null,audioEnd:null,fallbackEnd:null,cuesEnabled:true};
+const hands={enabled:false,starting:false,vad:null,busy:false,generation:0,silenceMs:1200,speechAt:0,threshold:0.62};
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const message=(type,data={})=>new Promise((resolve,reject)=>{
   chrome.runtime.sendMessage({type,...data},response=>{
@@ -20,9 +20,10 @@ const message=(type,data={})=>new Promise((resolve,reject)=>{
 });
 const wrapper=document.createElement("div");
 wrapper.id="claude-voice-bridge";
-wrapper.style.cssText="position:fixed;z-index:2147483646;right:12px;bottom:12px;max-width:calc(100vw - 24px);font-size:14px";
+wrapper.style.cssText="position:fixed;z-index:2147483646;right:0;top:calc(env(safe-area-inset-top, 0px) + 8px);max-width:calc(100vw - 44px)";
+wrapper.style.fontFamily=getComputedStyle(document.body).fontFamily;
 const shadow=wrapper.attachShadow({mode:"closed"});
-shadow.innerHTML='<style>:host{all:initial}#panel{box-sizing:border-box;background:#14283a;color:#f2f7fc;width:305px;max-width:calc(100vw - 24px);border:1px solid #82a0b2;border-radius:15px;padding:12px;box-shadow:0 4px 25px #0006;font:13px/1.4 system-ui,sans-serif}h3{font:700 14px system-ui;margin:0 0 7px}#status{min-height:38px;white-space:pre-wrap;overflow-wrap:anywhere}#transcript{max-height:76px;overflow-y:auto;white-space:pre-wrap;color:#cbe0f5;font-size:12px;margin:5px 0}#actions{display:flex;flex-wrap:wrap;gap:5px}button{font:600 12px system-ui;border:0;border-radius:8px;padding:8px 9px;background:#95e5c8;color:#03291c;cursor:pointer}button.secondary{background:#314960;color:#fff}button:disabled{opacity:.5;cursor:default}button:focus-visible{outline:3px solid #fff}small{display:block;color:#b2c5d7;margin-top:7px}</style><section id="panel" aria-label="Claude Voice Bridge"><h3>Claude Voice Bridge</h3><div id="status" role="status" aria-live="polite">Indítás…</div><div id="transcript"></div><div id="actions"><button id="record">Beszéd indítása</button><button id="hands" class="secondary" title="Silero VAD, felolvasás alatt mikrofon szünetel">Automata: ki</button><button id="send" class="secondary" disabled>Küldés</button><button id="stop" class="secondary" disabled>Stop</button><button id="repeat" class="secondary" disabled>Ismétlés</button><button id="settings" class="secondary" title="Beállítások">⚙</button></div><small id="hint">A mikrofon gomb második megnyomása lezárja a felvételt.</small></section>';
+shadow.innerHTML=globalThis.CVBPanel;
 (document.body||document.documentElement).appendChild(wrapper);
 const $=id=>shadow.getElementById(id);
 function setStatus(text,phase=s.phase){
@@ -72,16 +73,34 @@ function assistantElements(){
 function assistantText(){
   const latest=assistantElements().at(-1);
   if(!latest)return "";
-  const el=latest.cloneNode(true);
-  el.querySelectorAll("pre,code,button,script,style,[data-testid*='thinking'],[data-testid*='tool'],[aria-label*='Copy']").forEach(node=>node.remove());
-  return (el.textContent||"").replace(/\n{3,}/g,"\n\n").trim();
+  // Read only Claude's rendered answer, not its surrounding controls or
+  // accessibility-only labels such as "Claude responded".
+  const selectors=".standard-markdown,[data-testid='markdown-content']";
+  const candidates=(latest.matches(selectors)?[latest]:[]).concat([...latest.querySelectorAll(selectors)]);
+  const roots=candidates.filter((element,index)=>candidates.findIndex(other=>other===element)===index &&
+    !candidates.some(other=>other!==element&&other.contains(element)));
+  const content=roots.length?roots:[latest];
+  return content.map(el=>{
+    const clone=el.cloneNode(true);
+    clone.querySelectorAll("pre,code,button,script,style,.sr-only,[aria-hidden='true'],[data-testid*='thinking'],[data-testid*='tool'],[aria-label*='Copy']").forEach(node=>node.remove());
+    // innerText on live markdown is more faithful to visible text than a
+    // container's textContent. The clone path removes hidden descendants.
+    return roots.length?(el.innerText||clone.textContent||""):(clone.textContent||"");
+  }).join("\n\n").replace(/^\s*Claude\s+(?:responded|response)\s*[:\-–]?\s*/i,"").replace(/\n{3,}/g,"\n\n").trim();
 }
+
 async function init(){
   try{
     const cfg=await message("GET_SETTINGS");
     s.configured=cfg.configured;
     s.sendMode=cfg.settings.sendMode;
     hands.silenceMs=Math.max(700,Math.min(2500,Number(cfg.settings.silenceMs)||1200));
+    hands.threshold=Math.max(0.4,Math.min(0.9,Number(cfg.settings.vadThreshold)||0.62));
+    s.cuesEnabled=cfg.settings.soundCues!==false;
+    $("noise").value=String(hands.threshold);
+    $("silence").value=String(hands.silenceMs);
+    showSliderValues();
+    applyCollapsed(Boolean(cfg.settings.panelCollapsed));
     s.selectors=await fetch(chrome.runtime.getURL("selectors.json")).then(r=>r.json());
     if(!s.configured)setStatus("A Gemini API-kulcs nincs beállítva. Nyisd meg a ⚙ menüt.","idle");
     else if(!editor())setStatus("A Claude szerkesztő nem található. Nyiss meg egy beszélgetést.","idle");
@@ -118,6 +137,7 @@ async function startRecord(){
   recorder.onerror=()=>issue(new Error("A hangrögzítés megszakadt."));
   recorder.onstop=()=>{releaseMicrophone();void processRecorded(mime).catch(issue);};
   recorder.start(1000);
+  playCue("listen");
   void lockScreen();
   s.autoTimer=setTimeout(()=>{if(recorder.state==="recording")recorder.stop();},120000);
   setStatus("Felvétel. Beszélj magyarul, majd nyomd meg ismét a gombot.","recording");
@@ -125,6 +145,7 @@ async function startRecord(){
 function finishRecord(){
   if(s.recorder?.state!=="recording")return;
   s.recorder.stop();
+  playCue("process");
   setStatus("Leirat készül a Geminivel…","transcribing");
 }
 function blobBase64(blob){
@@ -332,6 +353,7 @@ async function resumeHands(generation=hands.generation){
   if(hands.enabled&&hands.generation===generation&&!hands.busy){
     hands.speechAt=0;
     setStatus("Automata mód: hallgatok. A beszéd végét a Silero érzékeli.","listening");
+    playCue("listen");
   }
 }
 async function disableHandsFree(){
@@ -362,8 +384,8 @@ async function enableHandsFree(){
       startOnLoad:false,
       baseAssetPath:chrome.runtime.getURL("vendor/"),
       onnxWASMBasePath:chrome.runtime.getURL("vendor/"),
-      positiveSpeechThreshold:0.62,
-      negativeSpeechThreshold:0.40,
+      positiveSpeechThreshold:hands.threshold,
+      negativeSpeechThreshold:Math.max(0.25,hands.threshold-0.22),
       redemptionFrames:Math.round(hands.silenceMs/32),
       minSpeechFrames:16,
       preSpeechPadFrames:10,
@@ -394,6 +416,7 @@ async function enableHandsFree(){
   }
 }
 async function toggleHandsFree(){
+  primeAudio();
   if(hands.starting)return;
   hands.starting=true;
   setStatus("Silero VAD inicializálása…","idle");
@@ -409,6 +432,7 @@ async function handleHandsSpeech(audio,generation){
   try{
     await pauseHands();
     if(!hands.enabled||hands.generation!==generation)return;
+    playCue("process");
     const seconds=audio.length/globalThis.CVBWav.SAMPLE_RATE;
     if(seconds<0.5){setStatus("Túl rövid beszéd. Folytatom a figyelést.","idle");return;}
     if(seconds>122)throw new Error("A hang meghaladta a 120 másodperces keretet.");
@@ -455,9 +479,69 @@ async function repeatWithHalfDuplex(){
 }
 
 async function toggleRecord(){
+  primeAudio();
   try{if(hands.enabled)await disableHandsFree();if(s.phase==="recording")finishRecord();else await startRecord();}
   catch(error){releaseMicrophone();issue(error);}
 }
+
+/* Local, low-volume state cues; never sent to Gemini and never play over TTS. */
+let cueContext=null;
+function primeAudio(){
+  try{
+    cueContext ||= new (window.AudioContext||window.webkitAudioContext)();
+    if(cueContext.state==="suspended")void cueContext.resume();
+  }catch{}
+}
+function playCue(which){
+  if(!s.cuesEnabled||s.phase==="playing")return;
+  try{
+    primeAudio();
+    if(!cueContext||cueContext.state!=="running")return;
+    const start=cueContext.currentTime+0.008;
+    const osc=cueContext.createOscillator(),gain=cueContext.createGain();
+    const listening=which==="listen";
+    osc.type="sine";
+    osc.frequency.setValueAtTime(listening?660:520,start);
+    osc.frequency.exponentialRampToValueAtTime(listening?810:440,start+0.095);
+    gain.gain.setValueAtTime(0.0001,start);
+    gain.gain.linearRampToValueAtTime(0.014,start+0.018);
+    gain.gain.exponentialRampToValueAtTime(0.0001,start+0.13);
+    osc.connect(gain).connect(cueContext.destination);
+    osc.start(start);osc.stop(start+0.14);
+    osc.onended=()=>{osc.disconnect();gain.disconnect();};
+  }catch{}
+}
+function applyCollapsed(value){
+  wrapper.dataset.collapsed=String(value);
+  const button=$("toggle");
+  button.textContent=value?"›":"‹";
+  button.setAttribute("aria-expanded",String(!value));
+  button.setAttribute("aria-label",value?"Panel kinyitása":"Panel becsukása");
+}
+function showSliderValues(){
+  $("noiseValue").textContent=Number($("noise").value).toFixed(2).replace(".",",");
+  $("silenceValue").textContent=$("silence").value+" ms";
+}
+async function updateVadControls(){
+  const previous=hands.enabled;
+  const threshold=Number($("noise").value);
+  const silence=Number($("silence").value);
+  if(previous)await disableHandsFree();
+  const saved=await message("UPDATE_UI_SETTINGS",{values:{vadThreshold:threshold,silenceMs:silence}});
+  hands.threshold=saved.settings.vadThreshold;
+  hands.silenceMs=saved.settings.silenceMs;
+  if(previous)await enableHandsFree();
+}
+$("toggle").addEventListener("click",()=>{
+  const closed=wrapper.dataset.collapsed!=="true";
+  applyCollapsed(closed);
+  void message("UPDATE_UI_SETTINGS",{values:{panelCollapsed:closed}}).catch(issue);
+});
+for(const id of ["noise","silence"]){
+  $(id).addEventListener("input",showSliderValues);
+  $(id).addEventListener("change",()=>{void updateVadControls().catch(issue);});
+}
+
 $("record").addEventListener("click",()=>{void toggleRecord();});
 $("hands").addEventListener("click",()=>{void toggleHandsFree();});
 $("send").addEventListener("click",()=>{void sendWithHalfDuplex().catch(issue);});
