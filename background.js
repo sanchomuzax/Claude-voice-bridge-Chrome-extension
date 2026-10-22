@@ -108,7 +108,7 @@ async function transcribe(message){
     const result=await postJson("interactions",config.apiKey,{
       model:config.sttModel,
       input:[{type:"audio",uri:file.uri,mime_type:mime}],
-      generation_config:{transcription_config:{language_codes:["hu-HU"],mode:"smart",...(terms.length?{custom_vocabulary:terms}:{})}}
+      generation_config:{transcription_config:{language_codes:["hu-HU"],mode:"verbatim",...(terms.length?{custom_vocabulary:terms}:{})}}
     });
     const transcript=readText(result);
     await charge(seconds/60,0);
