@@ -98,6 +98,7 @@ function releaseMicrophone(){
 }
 async function startRecord(){
   if(!s.configured){setStatus("Előbb add meg a Gemini API-kulcsot.","idle");return;}
+  if(["transcribing","sending","waiting"].includes(s.phase))return;
   if(s.phase==="playing")stopSpeech();
   if(s.recorder?.state==="recording")return;
   if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==="undefined")throw new Error("Ezen a böngészőn nincs MediaRecorder/getUserMedia támogatás.");
@@ -194,7 +195,9 @@ async function monitorAnswer(baseline,count){
       if(!fresh)return;
       if(last!==text){last=text;changedAt=now;return;}
       const stop=bySelector("stop");
-      if(stop)return;
+      // Streaming flag avoids reading a partially rendered Claude response.
+      const latest=elements.at(-1);
+      if(stop||latest?.closest("[data-is-streaming='true']")||latest?.querySelector("[data-is-streaming='true']"))return;
       if(now-changedAt>=1300){
         cleanup();s.lastAnswer=text;resolve();
         void speak(text).catch(issue);
