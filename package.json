@@ -1,13 +1,14 @@
 {
   "name": "claude-voice-bridge",
-  "version": "0.3.1",
+  "version": "0.4.0",
   "private": true,
   "description": "Chrome MV3 Gemini STT/TTS for claude.ai with Silero hands-free VAD",
   "scripts": {
     "build": "node scripts/build.mjs",
     "pack": "node scripts/pack.mjs",
     "test": "node --test tests/*.test.cjs",
-    "check": "node --check content.js && node --check background.js && node --check vad-codec.js && node --test tests/*.test.cjs"
+    "check": "node --check content.js && node --check background.js && node --check vad-codec.js && node --test tests/*.test.cjs",
+    "audit:secrets": "node scripts/audit-secrets.mjs"
   },
   "dependencies": {
     "@ricky0123/vad-web": "0.0.31",

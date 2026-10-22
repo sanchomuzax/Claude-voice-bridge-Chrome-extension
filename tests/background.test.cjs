@@ -105,3 +105,35 @@ test("page UI updates only allow whitelisted values and never overwrite secret",
  assert.equal(denied.ok,false);
  assert.equal(worker.store.apiKey,"test-api-key");
 });
+
+
+test("preview reads the style text with unsaved model and selected voice",async()=>{
+  let body=null;
+  const worker=makeWorker(async(url,options)=>{
+    body=JSON.parse(options.body);
+    return Response.json({steps:[{type:"model_output",content:[{type:"audio",data:"UklGRgAAAAA=",mime_type:"audio/wav"}]}]});
+  });
+  const style="Nyugodt, természetes magyar beszéd, határozott tempó.";
+  const output=await worker.send({type:"PREVIEW_TTS",text:style,style,
+    ttsModel:"gemini-3.8-flash-tts",voice:"Orus"},"https://claude.ai/chat/test",true);
+  assert.equal(output.ok,true,output.error);
+  assert.equal(body.model,"gemini-3.8-flash-tts");
+  assert.equal(body.input[0].content[0].text,style);
+  assert.equal(body.generation_config.speech_config[0].voice,"Orus");
+  assert.equal(worker.store.dailyUsage.chars,style.length);
+});
+test("preview API is accessible only from extension-owned settings",async()=>{
+ const worker=makeWorker(async()=>{throw new Error("No fetch expected")});
+ const rejected=await worker.send({type:"PREVIEW_TTS",text:"Szia!",
+   style:"Szia!",ttsModel:"gemini-3.8-flash-tts",voice:"Kore"});
+ assert.equal(rejected.ok,false);
+ const tooLong=await worker.send({type:"PREVIEW_TTS",text:"x".repeat(201),
+   style:"x".repeat(201),ttsModel:"gemini-3.8-flash-tts",voice:"Kore"},
+   "https://claude.ai/chat/test",true);
+ assert.equal(tooLong.ok,false);
+});
+test("new default style uses határozott tempó",async()=>{
+ const worker=makeWorker(async()=>{throw Error("No fetch")});
+ const settings=await worker.send({type:"GET_SETTINGS"});
+ assert.match(settings.settings.style,/határozott tempó/);
+});

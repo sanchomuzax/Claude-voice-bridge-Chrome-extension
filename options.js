@@ -13,7 +13,7 @@ const defaultModels={
 const curatedVoices="Zephyr,Puck,Charon,Kore,Fenrir,Leda,Orus,Aoede,Callirrhoe,Autonoe,Enceladus,Iapetus,Umbriel,Algieba,Despina,Erinome,Algenib,Rasalgethi,Laomedeia,Achernar,Alnilam,Schedar,Gacrux,Pulcherrima,Achird,Zubenelgenubi,Vindemiatrix,Sadachbia,Sadaltager,Sulafat".split(",");
 const defaults={
  sttModel:"gemini-3.5-transcribe",ttsModel:"gemini-3.8-flash-lite-tts",
- voice:"Kore",style:"Nyugodt, természetes magyar beszéd, közepes tempó.",
+ voice:"Kore",style:"Nyugodt, természetes magyar beszéd, határozott tempó.",
  sendMode:"auto",silenceMs:1200,vadThreshold:0.62,soundCues:true,
  maxMinutes:30,maxChars:20000,vocabulary:"Claude\nGemini\nQuetta"
 };
@@ -42,8 +42,8 @@ function options(id,items,current){
  if(current)element.value=current;
  if(!element.value&&element.options.length)element.selectedIndex=0;
 }
-async function rpc(type){
- return new Promise((resolve,reject)=>chrome.runtime.sendMessage({type},response=>{
+async function rpc(type,payload={}){
+ return new Promise((resolve,reject)=>chrome.runtime.sendMessage({type,...payload},response=>{
    if(chrome.runtime.lastError)return reject(new Error(chrome.runtime.lastError.message));
    if(!response?.ok)return reject(new Error(response?.error||"Nem sikerült kapcsolódni a szolgáltatáshoz."));
    resolve(response);
@@ -75,7 +75,11 @@ async function init(){
  for(const key of keys){
   const node=el(key);
   if(!node)continue;
-  const value=data[key]??defaults[key]??"";
+  let value=data[key]??defaults[key]??"";
+  if(key==="style"&&value==="Nyugodt, természetes magyar beszéd, közepes tempó."){
+    value=defaults.style;
+    await chrome.storage.local.set({style:value});
+  }
   if(node.type==="checkbox")node.checked=value!==false;
   else node.value=String(value);
  }
@@ -112,4 +116,61 @@ el("checkMicrophone").addEventListener("click",async()=>{
   el("status").textContent="Mikrofon működik. A claude.ai lap külön engedélyt kérhet.";
  }catch(error){el("status").textContent="Mikrofonhiba: "+error.message;}
 });
+
+/* Explicit user activation, no ambient microphone or hidden playback.
+ * A second click cancels playback immediately; an in-flight API response is ignored.
+ */
+let previewEpoch=0;
+let previewAudio=null;
+let previewUrl=null;
+function previewButtonState(active){
+ const btn=el("previewTts");
+ btn.setAttribute("aria-pressed",String(active));
+ btn.textContent=active?"■":"▶";
+ btn.setAttribute("aria-label",active?"Próba-felolvasás megszakítása":"Próba-felolvasás");
+ btn.classList.toggle("active",active);
+}
+function stopPreview(){
+ previewEpoch++;
+ if(previewAudio){previewAudio.pause();previewAudio.removeAttribute("src");previewAudio.load();previewAudio=null;}
+ if(previewUrl){URL.revokeObjectURL(previewUrl);previewUrl=null;}
+ previewButtonState(false);
+ el("previewStatus").textContent="Próba-felolvasás leállítva.";
+}
+async function togglePreview(){
+ if(el("previewTts").getAttribute("aria-pressed")==="true"){stopPreview();return;}
+ const text=el("style").value.trim();
+ if(!text){el("previewStatus").textContent="Írj be egy beszédstílust.";return;}
+ const id=++previewEpoch;
+ previewButtonState(true);
+ el("previewStatus").textContent="A Gemini felolvasást készít…";
+ try{
+  const output=await rpc("PREVIEW_TTS",{
+   text,style:text,ttsModel:el("ttsModel").value,voice:el("voice").value
+  });
+  if(id!==previewEpoch)return;
+  const raw=atob(output.data),arr=new Uint8Array(raw.length);
+  for(let i=0;i<raw.length;i++)arr[i]=raw.charCodeAt(i);
+  const type=output.mime||"audio/wav";
+  previewUrl=URL.createObjectURL(new Blob([arr],{type}));
+  previewAudio=new Audio(previewUrl);
+  const audio=previewAudio;
+  const done=()=>{
+   if(id!==previewEpoch)return;
+   stopPreview();
+   el("previewStatus").textContent="Próba-felolvasás véget ért.";
+  };
+  audio.addEventListener("ended",done,{once:true});
+  audio.addEventListener("error",()=>{if(id===previewEpoch){stopPreview();el("previewStatus").textContent="Hang lejátszási hiba.";}} ,{once:true});
+  el("previewStatus").textContent="Felolvasás…";
+  await audio.play();
+ }catch(error){
+  if(id!==previewEpoch)return;
+  stopPreview();
+  el("previewStatus").textContent="TTS-hiba: "+String(error.message||error);
+ }
+}
+el("previewTts").addEventListener("click",()=>{void togglePreview();});
+window.addEventListener("pagehide",stopPreview);
+
 init().catch(error=>el("status").textContent=error.message);
