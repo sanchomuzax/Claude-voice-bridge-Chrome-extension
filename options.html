@@ -11,7 +11,13 @@
 <p id="ttsPrice" class="price"></p>
 <label>Felolvasó hang<select id="voice" required></select></label>
 <p class="hint"><a href="https://ai.google.dev/gemini-api/docs/speech-generation" target="_blank">Google hivatalos TTS-hangok</a>. Az elérhetőség az API-kulcstól függ.</p>
-<label>Beszédstílus<input id="style"></label>
+<label>Beszédstílus
+<div class="style-preview">
+<input id="style" maxlength="200" aria-describedby="previewHint">
+<button type="button" id="previewTts" class="preview-btn secondary" aria-label="Próba-felolvasás" aria-pressed="false" title="Stílus felolvasása">▶</button>
+</div></label>
+<p class="hint" id="previewHint">A lejátszás a stílus szövegét olvassa fel a kiválasztott Gemini-modellel és hanggal. Újabb koppintás megszakítja.</p>
+<p class="hint" id="previewStatus" role="status" aria-live="polite"></p>
 </section>
 <section><h2>Beszélgetés</h2>
 <label>Küldés<select id="sendMode"><option value="auto">Automatikus</option><option value="confirm">Megerősítés szükséges</option></select></label>
