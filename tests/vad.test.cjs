@@ -32,14 +32,15 @@ test("wav encoder rejects empty and absurdly long audio",()=>{
 test("MV3 includes local VAD script and vendor resources",()=>{
  const manifest=JSON.parse(fs.readFileSync(path.join(__dirname,"..","manifest.json"),"utf8"));
  const scripts=manifest.content_scripts[0].js;
- assert.deepEqual(scripts,["shared.js","vad-codec.js","dist/vad-bundle.js","content.js"]);
+ assert.deepEqual(scripts,["shared.js","vad-codec.js","dist/vad-bundle.js","panel-ui.js","content.js"]);
  assert.ok(manifest.web_accessible_resources[0].resources.includes("vendor/*"));
- assert.equal(manifest.version,"0.2.0");
+ assert.equal(manifest.version,"0.3.0");
 });
 test("VAD remains opt-in and speech capture has explicit UI control",()=>{
  const src=fs.readFileSync(path.join(__dirname,"..","content.js"),"utf8");
  assert.ok(src.includes("enabled:false,starting:false"));
- assert.ok(src.includes("id=\"hands\""));
+ const panel=fs.readFileSync(path.join(__dirname,"..","panel-ui.js"),"utf8");
+ assert.ok(panel.includes("id=")&&panel.includes("hands"));
  assert.ok(src.includes("await pauseHands()"));
  assert.ok(src.includes("await resumeHands(generation)"));
  assert.ok(src.includes("Silero VAD"));

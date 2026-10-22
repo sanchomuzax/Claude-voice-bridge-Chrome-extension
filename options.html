@@ -1,1 +1,28 @@
-<!doctype html><html lang="hu"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Claude Voice Bridge – Beállítások</title><link rel="stylesheet" href="ui.css"></head><body><main><h1>Claude Voice Bridge</h1><p>Privát PoC. A beszéd és Claude felolvasott válaszai a Gemini API-hoz kerülnek. Ne küldj érzékeny tartalmat!</p><form id="settings"><label>Gemini API-kulcs<input id="apiKey" type="password" autocomplete="off" placeholder="AIza…" required></label><label>STT modell<input id="sttModel" required></label><label>TTS modell<input id="ttsModel" required></label><label>TTS hang<input id="voice" required></label><label>Stílusutasítás<input id="style"></label><label>Felvétel utáni küldés<select id="sendMode"><option value="auto">Automatikus</option><option value="confirm">Megerősítést kérek</option></select></label><label>Beszéd vége, csend (ms)<input id="silenceMs" type="number" min="700" max="2500" step="100"></label><label>Napi STT-korlát (perc)<input id="maxMinutes" type="number" min="1" max="1000"></label><label>Napi TTS-korlát (karakter)<input id="maxChars" type="number" min="100" max="1000000"></label><label>Szótár (soronként egy kifejezés)<textarea id="vocabulary" rows="5"></textarea></label><button type="submit">Mentés</button><button type="button" id="checkMicrophone">Mikrofon ellenőrzése</button><span role="status" id="status"></span></form><p class="hint">A felvételhez a claude.ai lap mikrofonengedélye szükséges. A bővítmény nem kér Claude API-kulcsot.</p></main><script src="options.js"></script></body></html>
+<!doctype html><html lang="hu"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Claude Voice Bridge • Beállítások</title><link rel="stylesheet" href="ui.css"></head>
+<body><main><header><div class="brand"><span class="glyph">✳</span><div><h1>Claude Voice Bridge</h1><p>Hang, modellek és felismerés</p></div></div></header>
+<form id="settings">
+<section><h2>Google Gemini</h2><p class="hint">A modellek és hangok listája a Google hivatalos API-járól töltődik be. Az árak a hivatalos, 2026. október 22-én ellenőrzött <a href="https://ai.google.dev/gemini-api/docs/pricing" target="_blank">díjszabásból</a> származnak, nem az API válaszából. A számlázási szintedtől függenek.</p>
+<label>Gemini API-kulcs<input id="apiKey" type="password" autocomplete="off" required placeholder="Google AI Studio API key"></label>
+<button type="button" id="reloadCatalog" class="secondary">Hivatalos listák frissítése</button>
+<p id="catalogStatus" role="status" class="hint"></p>
+<label>Beszédfelismerés (STT)<select id="sttModel" required></select></label>
+<p id="sttPrice" class="price"></p>
+<label>Felolvasó modell (TTS)<select id="ttsModel" required></select></label>
+<p id="ttsPrice" class="price"></p>
+<label>Felolvasó hang<select id="voice" required></select></label>
+<p class="hint"><a href="https://ai.google.dev/gemini-api/docs/speech-generation" target="_blank">Google hivatalos TTS-hangok</a>. Az elérhetőség az API-kulcstól függ.</p>
+<label>Beszédstílus<input id="style"></label>
+</section>
+<section><h2>Beszélgetés</h2>
+<label>Küldés<select id="sendMode"><option value="auto">Automatikus</option><option value="confirm">Megerősítés szükséges</option></select></label>
+<label class="check"><input type="checkbox" id="soundCues">Finom hangjelzések a hallgatáshoz és feldolgozáshoz</label>
+<label>Zajküszöb, magasabb = szigorúbb érzékelés <output id="vadValue"></output><input type="range" id="vadThreshold" min=".40" max=".90" step=".02"></label>
+<label>Beszédvég (csend) <output id="silenceValue"></output><input type="range" id="silenceMs" min="700" max="2500" step="100"></label>
+<label>Napi STT-keret (perc)<input id="maxMinutes" type="number" min="1" max="1000"></label>
+<label>Napi TTS-keret (karakter)<input id="maxChars" type="number" min="100" max="1000000"></label>
+<label>Szótár (soronként egy kifejezés)<textarea id="vocabulary" rows="4"></textarea></label></section>
+<div class="footer"><button type="submit">Beállítások mentése</button><button type="button" class="secondary" id="checkMicrophone">Mikrofonellenőrzés</button></div>
+<p id="status" role="status"></p>
+</form>
+<p class="hint">A rögzített hang és Claude felolvasott szövege a Google Gemini szolgáltatásához kerül. Érzékeny tartalmakra ezt a PoC-t ne használd.</p>
+</main><script src="options.js"></script></body></html>

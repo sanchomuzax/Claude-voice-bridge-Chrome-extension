@@ -13,18 +13,18 @@ function makeWorker(respondFetch){
         set:async values=>Object.assign(store,values),
         setAccessLevel:async()=>{}
       }},
-      runtime:{onInstalled:{addListener:()=>{}},onStartup:{addListener:()=>{}},onMessage:{addListener:f=>{onMessage=f;}}},
+      runtime:{id:"test-extension",getURL:path=>"chrome-extension://test-extension/"+path,onInstalled:{addListener:()=>{}},onStartup:{addListener:()=>{}},onMessage:{addListener:f=>{onMessage=f;}}},
       commands:{onCommand:{addListener:()=>{}}},
       tabs:{query:async()=>[]}
     },
     fetch:respondFetch,
-    AbortSignal,atob,setTimeout,clearTimeout,Uint8Array,Intl,Date,Promise,Error,TypeError
+    AbortSignal,atob,URL,setTimeout,clearTimeout,Uint8Array,Intl,Date,Promise,Error,TypeError
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,"..","background.js"),"utf8"),ctx);
-  function send(req,url="https://claude.ai/chat/example"){
+  function send(req,url="https://claude.ai/chat/example",extension=false){
     return new Promise((resolve,reject)=>{
       const timeout=setTimeout(()=>reject(new Error("Background response timeout")),500);
-      onMessage(req,{url,id:"test-extension",tab:{url}},response=>{clearTimeout(timeout);resolve(response);});
+      onMessage(req,extension?{url:"chrome-extension://test-extension/options.html",id:"test-extension"}:{url,id:"test-extension",tab:{url}},response=>{clearTimeout(timeout);resolve(response);});
     });
   }
   return {store,send};
@@ -74,4 +74,34 @@ test("rejects external websites",async()=>{
  const worker=makeWorker(async()=>{throw new Error("No fetch");});
  const output=await worker.send({type:"TRANSCRIBE"},"https://attacker.example/");
  assert.equal(output.ok,false);
+});
+
+test("catalog lists only supported Google models and official voices",async()=>{
+ const called=[];
+ const worker=makeWorker(async(url,options)=>{
+  called.push({url,method:options.method});
+  if(url.includes("/v1beta/models"))return Response.json({models:[
+    {name:"models/gemini-3.5-transcribe",displayName:"Gemini 3.5 Transcribe"},
+    {name:"models/gemini-3.8-flash-lite-tts",displayName:"Gemini 3.8 Flash-Lite TTS"},
+    {name:"models/gemini-3.8-live",displayName:"Gemini 3.8 Live"}]});
+  if(url.includes("/v1beta/voices"))return Response.json({voices:[{id:"Kore",display_name:"Kore",description:"Firm voice"}]});
+  throw new Error("Unexpected fetch "+url);
+ });
+ const output=await worker.send({type:"GET_CATALOG"},"https://claude.ai/chat/test",true);
+ assert.equal(output.ok,true,output.error);
+ assert.equal(output.models.stt.length,1);
+ assert.equal(output.models.tts.length,1);
+ assert.equal(output.models.tts[0].id,"gemini-3.8-flash-lite-tts");
+ assert.equal(output.voices[0].id,"Kore");
+ assert.equal(called.length,2);
+});
+test("page UI updates only allow whitelisted values and never overwrite secret",async()=>{
+ const worker=makeWorker(async()=>{throw new Error("No fetch expected");});
+ const response=await worker.send({type:"UPDATE_UI_SETTINGS",values:{vadThreshold:0.68,silenceMs:1200,panelCollapsed:true}});
+ assert.equal(response.ok,true,response.error);
+ assert.equal(worker.store.vadThreshold,0.68);
+ assert.equal(worker.store.apiKey,"test-api-key");
+ const denied=await worker.send({type:"UPDATE_UI_SETTINGS",values:{apiKey:"evil"}});
+ assert.equal(denied.ok,false);
+ assert.equal(worker.store.apiKey,"test-api-key");
 });
