@@ -54,7 +54,7 @@ test("STT uses resumable Files upload, Interactions, and deletes temp file",asyn
  const payload=JSON.parse(calls[2].options.body);
  assert.equal(payload.model,"gemini-3.5-transcribe");
  assert.equal(payload.input[0].type,"audio");
- assert.equal(payload.generation_config.transcription_config.mode,"smart");
+ assert.equal(payload.generation_config.transcription_config.mode,"verbatim");
  assert.equal(worker.store.dailyUsage.minutes,5/60);
 });
 test("TTS uses speech metadata and audio response",async()=>{
