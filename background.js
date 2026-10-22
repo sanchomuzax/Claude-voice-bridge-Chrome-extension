@@ -4,7 +4,7 @@ const BASE="https://generativelanguage.googleapis.com";
 const defaults={
   sttModel:"gemini-3.5-transcribe",ttsModel:"gemini-3.8-flash-lite-tts",
   voice:"Kore",style:"Nyugodt, természetes magyar beszéd, közepes tempó.",
-  sendMode:"auto",silenceMs:1200,maxMinutes:30,maxChars:20000,vocabulary:"Claude\nGemini\nQuetta"
+  sendMode:"auto",silenceMs:1200,vadThreshold:0.62,soundCues:true,panelCollapsed:false,maxMinutes:30,maxChars:20000,vocabulary:"Claude\nGemini\nQuetta"
 };
 const exposed=Object.keys(defaults);
 const day=()=>new Date().toLocaleDateString("en-CA",{timeZone:"Europe/Budapest",year:"numeric",month:"2-digit",day:"2-digit"});
@@ -146,6 +146,64 @@ async function synthesize(message){
   await charge(0,sentence.length);
   return {data:audio.data,mime:audio.mime||"audio/wav"};
 }
+
+async function officialCatalog(){
+  const cfg=await settings();
+  if(!cfg.apiKey)throw new Error("Előbb mentsd el a Gemini API-kulcsodat.");
+  const headers=keyHeaders(cfg.apiKey);
+  const modelItems=[];
+  let token="";
+  for(let page=0;page<5;page++){
+    const url=new URL(BASE+"/v1beta/models");
+    url.searchParams.set("pageSize","1000");
+    if(token)url.searchParams.set("pageToken",token);
+    const result=await (await request(url.toString(),{method:"GET",headers})).json();
+    modelItems.push(...(result.models||[]));
+    token=result.nextPageToken||"";
+    if(!token)break;
+  }
+  // This extension uses the Interactions API transcription and 3.8 TTS
+  // schemas: do NOT offer unsupported Live or generateContent-only models.
+  const stt=modelItems.filter(item=>/^models\/gemini-[\w.-]+-transcribe$/.test(item.name||""));
+  const tts=modelItems.filter(item=>/^models\/gemini-3\.8-[\w.-]+-tts$/.test(item.name||""));
+  const models={stt:stt.map(item=>({id:item.name.slice(7),name:item.displayName||item.name.slice(7)})),
+    tts:tts.map(item=>({id:item.name.slice(7),name:item.displayName||item.name.slice(7)}))};
+  let voices=[],voicesError="";
+  try{
+    const url=new URL(BASE+"/v1beta/voices");
+    url.searchParams.set("page_size","1000");
+    const result=await (await request(url.toString(),{method:"GET",headers})).json();
+    voices=(result.voices||[]).map(item=>({
+      id:item.id||item.voice_id||item.name?.replace(/^voices\//,"")||"",
+      name:item.display_name||item.displayName||item.id||item.name||"",
+      description:item.description||""
+    })).filter(item=>item.id).slice(0,1000);
+    if(result.next_page_token||result.nextPageToken)voicesError="A hanglista első 1000 eleme látható.";
+  }catch(e){voicesError=String(e?.message||e).slice(0,200);}
+  return {models,voices,voicesError,asOf:"2026-10-22"};
+}
+async function updateUiSettings(values){
+  if(!values||typeof values!=="object")throw new Error("Hibás felületbeállítás.");
+  const allowed=new Set(["vadThreshold","silenceMs","panelCollapsed","soundCues"]);
+  const keys=Object.keys(values);
+  if(!keys.length||keys.some(key=>!allowed.has(key)))throw new Error("Nem engedélyezett beállítás.");
+  const out={};
+  if("vadThreshold" in values){
+    const v=Number(values.vadThreshold);
+    if(!Number.isFinite(v)||v<0.4||v>0.9)throw new Error("Zajküszöb csak 0,40 és 0,90 között lehet.");
+    out.vadThreshold=v;
+  }
+  if("silenceMs" in values){
+    const v=Number(values.silenceMs);
+    if(!Number.isInteger(v)||v<700||v>2500)throw new Error("A csendküszöb 700 és 2500 ms közé eshet.");
+    out.silenceMs=v;
+  }
+  if("panelCollapsed" in values)out.panelCollapsed=Boolean(values.panelCollapsed);
+  if("soundCues" in values)out.soundCues=Boolean(values.soundCues);
+  await chrome.storage.local.set(out);
+  return {settings:out};
+}
+
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   if(!message||typeof message.type!=="string")return;
   const page=String(sender.url||sender.tab?.url||"");
@@ -157,6 +215,8 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
       return {settings:Object.fromEntries(exposed.map(k=>[k,config[k]])),configured:!!config.apiKey};
     }
     if(message.type==="GET_STATUS")return {usage:await getUsage()};
+    if(message.type==="GET_CATALOG"&&!sender.tab)return officialCatalog();
+    if(message.type==="UPDATE_UI_SETTINGS"&&page.startsWith("https://claude.ai/"))return updateUiSettings(message.values);
     if(message.type==="OPEN_OPTIONS"){await chrome.runtime.openOptionsPage();return{};}
     if(message.type==="TRANSCRIBE"&&page.startsWith("https://claude.ai/"))return transcribe(message);
     if(message.type==="SYNTHESIZE"&&page.startsWith("https://claude.ai/"))return synthesize(message);
