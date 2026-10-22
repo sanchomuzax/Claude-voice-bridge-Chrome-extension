@@ -53,7 +53,8 @@ test("v0.3 UI, model lists and audio cues are wired",()=>{
  assert.match(content,/wrapper\.dataset\.collapsed/);
  assert.match(content,/playCue\("process"\)/);
  assert.match(content,/playCue\("listen"\)/);
- assert.match(content,/clone\.querySelectorAll/);
+ assert.match(content,/function rendered\(node\)/);
+ assert.match(content,/\.sr-only/);
  assert.match(background,/GET_CATALOG/);
  assert.match(background,/UPDATE_UI_SETTINGS/);
  assert.match(options,/ai\.google\.dev\/gemini-api\/docs\/pricing|prices=/);
