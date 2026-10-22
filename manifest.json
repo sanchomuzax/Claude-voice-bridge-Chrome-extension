@@ -1,8 +1,8 @@
 {
   "manifest_version": 3,
   "name": "Claude Voice Bridge",
-  "version": "0.1.0",
-  "description": "Privát magyar beszélgetés a claude.ai webes felületén Gemini STT/TTS segítségével.",
+  "version": "0.2.0",
+  "description": "Magyar Claude hangos beszélgetés Gemini STT/TTS és helyi Silero VAD segítségével.",
   "permissions": [
     "storage",
     "activeTab"
@@ -25,6 +25,8 @@
       ],
       "js": [
         "shared.js",
+        "vad-codec.js",
+        "dist/vad-bundle.js",
         "content.js"
       ],
       "run_at": "document_idle"
@@ -33,7 +35,8 @@
   "web_accessible_resources": [
     {
       "resources": [
-        "selectors.json"
+        "selectors.json",
+        "vendor/*"
       ],
       "matches": [
         "https://claude.ai/*"

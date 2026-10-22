@@ -8,7 +8,8 @@ window.__claudeVoiceBridgeLoaded=true;
 const s={phase:"idle",selectors:{},configured:false,sendMode:"auto",stream:null,recorder:null,
  chunks:[],started:0,autoTimer:null,wakeLock:null,pending:false,transcript:"",
  lastAnswer:"",audio:null,audioUrl:null,playToken:0,rate:1,lastSpoken:"",
- activeWait:null};
+ activeWait:null,audioEnd:null,fallbackEnd:null};
+const hands={enabled:false,starting:false,vad:null,busy:false,generation:0,silenceMs:1200,speechAt:0};
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const message=(type,data={})=>new Promise((resolve,reject)=>{
   chrome.runtime.sendMessage({type,...data},response=>{
@@ -21,13 +22,16 @@ const wrapper=document.createElement("div");
 wrapper.id="claude-voice-bridge";
 wrapper.style.cssText="position:fixed;z-index:2147483646;right:12px;bottom:12px;max-width:calc(100vw - 24px);font-size:14px";
 const shadow=wrapper.attachShadow({mode:"closed"});
-shadow.innerHTML='<style>:host{all:initial}#panel{box-sizing:border-box;background:#14283a;color:#f2f7fc;width:282px;max-width:calc(100vw - 24px);border:1px solid #82a0b2;border-radius:15px;padding:12px;box-shadow:0 4px 25px #0006;font:13px/1.4 system-ui,sans-serif}h3{font:700 14px system-ui;margin:0 0 7px}#status{min-height:38px;white-space:pre-wrap;overflow-wrap:anywhere}#transcript{max-height:76px;overflow-y:auto;white-space:pre-wrap;color:#cbe0f5;font-size:12px;margin:5px 0}#actions{display:flex;flex-wrap:wrap;gap:5px}button{font:600 12px system-ui;border:0;border-radius:8px;padding:8px 9px;background:#95e5c8;color:#03291c;cursor:pointer}button.secondary{background:#314960;color:#fff}button:disabled{opacity:.5;cursor:default}button:focus-visible{outline:3px solid #fff}small{display:block;color:#b2c5d7;margin-top:7px}</style><section id="panel" aria-label="Claude Voice Bridge"><h3>Claude Voice Bridge</h3><div id="status" role="status" aria-live="polite">Indítás…</div><div id="transcript"></div><div id="actions"><button id="record">Beszéd indítása</button><button id="send" class="secondary" disabled>Küldés</button><button id="stop" class="secondary" disabled>Stop</button><button id="repeat" class="secondary" disabled>Ismétlés</button><button id="settings" class="secondary" title="Beállítások">⚙</button></div><small id="hint">A mikrofon gomb második megnyomása lezárja a felvételt.</small></section>';
+shadow.innerHTML='<style>:host{all:initial}#panel{box-sizing:border-box;background:#14283a;color:#f2f7fc;width:305px;max-width:calc(100vw - 24px);border:1px solid #82a0b2;border-radius:15px;padding:12px;box-shadow:0 4px 25px #0006;font:13px/1.4 system-ui,sans-serif}h3{font:700 14px system-ui;margin:0 0 7px}#status{min-height:38px;white-space:pre-wrap;overflow-wrap:anywhere}#transcript{max-height:76px;overflow-y:auto;white-space:pre-wrap;color:#cbe0f5;font-size:12px;margin:5px 0}#actions{display:flex;flex-wrap:wrap;gap:5px}button{font:600 12px system-ui;border:0;border-radius:8px;padding:8px 9px;background:#95e5c8;color:#03291c;cursor:pointer}button.secondary{background:#314960;color:#fff}button:disabled{opacity:.5;cursor:default}button:focus-visible{outline:3px solid #fff}small{display:block;color:#b2c5d7;margin-top:7px}</style><section id="panel" aria-label="Claude Voice Bridge"><h3>Claude Voice Bridge</h3><div id="status" role="status" aria-live="polite">Indítás…</div><div id="transcript"></div><div id="actions"><button id="record">Beszéd indítása</button><button id="hands" class="secondary" title="Silero VAD, felolvasás alatt mikrofon szünetel">Automata: ki</button><button id="send" class="secondary" disabled>Küldés</button><button id="stop" class="secondary" disabled>Stop</button><button id="repeat" class="secondary" disabled>Ismétlés</button><button id="settings" class="secondary" title="Beállítások">⚙</button></div><small id="hint">A mikrofon gomb második megnyomása lezárja a felvételt.</small></section>';
 (document.body||document.documentElement).appendChild(wrapper);
 const $=id=>shadow.getElementById(id);
 function setStatus(text,phase=s.phase){
   s.phase=phase; $("status").textContent=text;
   $("record").textContent=phase==="recording"?"Felvétel lezárása":"Beszéd indítása";
-  $("record").disabled=["transcribing","sending","waiting"].includes(phase);
+  $("record").disabled=hands.enabled||hands.starting||["transcribing","sending","waiting"].includes(phase);
+  $("hands").textContent=hands.enabled?"Automata: be":"Automata: ki";
+  $("hands").disabled=hands.starting;
+  $("hands").setAttribute("aria-pressed",String(hands.enabled));
   $("send").disabled=!s.pending;
   $("stop").disabled=phase!=="playing";
   $("repeat").disabled=!s.lastAnswer||phase==="recording";
@@ -77,6 +81,7 @@ async function init(){
     const cfg=await message("GET_SETTINGS");
     s.configured=cfg.configured;
     s.sendMode=cfg.settings.sendMode;
+    hands.silenceMs=Math.max(700,Math.min(2500,Number(cfg.settings.silenceMs)||1200));
     s.selectors=await fetch(chrome.runtime.getURL("selectors.json")).then(r=>r.json());
     if(!s.configured)setStatus("A Gemini API-kulcs nincs beállítva. Nyisd meg a ⚙ menüt.","idle");
     else if(!editor())setStatus("A Claude szerkesztő nem található. Nyiss meg egy beszélgetést.","idle");
@@ -199,8 +204,7 @@ async function monitorAnswer(baseline,count){
       const latest=elements.at(-1);
       if(stop||latest?.closest("[data-is-streaming='true']")||latest?.querySelector("[data-is-streaming='true']"))return;
       if(now-changedAt>=1300){
-        cleanup();s.lastAnswer=text;resolve();
-        void speak(text).catch(issue);
+        cleanup();s.lastAnswer=text;resolve(speak(text));
       }
     }
     obs.observe(document.body,{subtree:true,childList:true,characterData:true});
@@ -208,12 +212,14 @@ async function monitorAnswer(baseline,count){
   });
 }
 function clearAudio(){
+  if(s.audioEnd){const done=s.audioEnd;s.audioEnd=null;done();}
   if(s.audio){s.audio.pause();s.audio.src="";s.audio=null;}
   if(s.audioUrl){URL.revokeObjectURL(s.audioUrl);s.audioUrl=null;}
 }
 function stopSpeech(){
   s.playToken++;clearAudio();
   if("speechSynthesis" in window)speechSynthesis.cancel();
+  if(s.fallbackEnd){const done=s.fallbackEnd;s.fallbackEnd=null;done();}
   setStatus("Felolvasás leállítva.","idle");
 }
 function decodeAudio(base64,mime){
@@ -228,9 +234,13 @@ async function playBlob(blob,token){
   s.audioUrl=URL.createObjectURL(blob);
   const audio=new Audio(s.audioUrl);
   s.audio=audio;audio.playbackRate=s.rate;
-  await new Promise(async(resolve,reject)=>{
-    audio.onended=resolve;audio.onerror=()=>reject(new Error("A böngésző nem tudja lejátszani a hangot."));
-    try{await audio.play();}catch(error){reject(error);}
+  await new Promise((resolve,reject)=>{
+    let settled=false;
+    const complete=error=>{if(settled)return;settled=true;s.audioEnd=null;error?reject(error):resolve();};
+    s.audioEnd=()=>complete();
+    audio.onended=()=>complete();
+    audio.onerror=()=>complete(new Error("A böngésző nem tudja lejátszani a hangot."));
+    audio.play().catch(complete);
   });
   clearAudio();
 }
@@ -239,7 +249,10 @@ function fallbackSpeak(text,token){
     if(!("speechSynthesis" in window))return reject(new Error("A böngészőben nincs beépített TTS."));
     const utterance=new SpeechSynthesisUtterance(text);
     utterance.lang="hu-HU";utterance.rate=s.rate;
-    utterance.onend=resolve;utterance.onerror=()=>resolve();
+    let settled=false;
+    const done=()=>{if(settled)return;settled=true;s.fallbackEnd=null;resolve();};
+    s.fallbackEnd=done;
+    utterance.onend=done;utterance.onerror=done;
     if(token!==s.playToken)return resolve();
     speechSynthesis.speak(utterance);
   });
@@ -298,25 +311,163 @@ async function handleCommand(command){
   }else if(command==="repeat"){
     if(s.lastAnswer)await speak(s.lastAnswer);
   }else if(command==="stop")stopSpeech();
-  else if(command==="end"){stopSpeech();setStatus("Hangos mód kikapcsolva.","idle");}
+  else if(command==="end"){stopSpeech();await disableHandsFree();setStatus("Hangos mód kikapcsolva.","idle");}
   else if(command==="slower"||command==="faster"){
     s.rate=Math.max(0.7,Math.min(1.4,s.rate+(command==="faster"?0.15:-0.15)));
     setStatus("Felolvasás tempója: "+Math.round(s.rate*100)+"%.","idle");
   }
 }
+
+/* Opt-in Silero VAD mode. Speech detection stays local in ONNX/WASM.
+ * The valid PCM segment is transcribed only after the end-of-speech callback.
+ * The VAD stream is paused throughout STT, Claude response and TTS (half-duplex).
+ */
+async function pauseHands(){
+  if(hands.vad)await hands.vad.pause();
+}
+async function resumeHands(generation=hands.generation){
+  if(!hands.enabled||hands.generation!==generation||hands.busy||s.pending&&s.sendMode!=="confirm")return;
+  if(!hands.vad)return;
+  await hands.vad.start();
+  if(hands.enabled&&hands.generation===generation&&!hands.busy){
+    hands.speechAt=0;
+    setStatus("Automata mód: hallgatok. A beszéd végét a Silero érzékeli.","listening");
+  }
+}
+async function disableHandsFree(){
+  hands.enabled=false;
+  hands.generation++;
+  hands.speechAt=0;
+  const model=hands.vad;
+  hands.vad=null;
+  // Cancel a pending callback by advancing generation. Any in-flight STT is
+  // checked again before the page is modified or another Claude message sent.
+  try{await model?.destroy();}catch{}
+  await unlockScreen();
+  setStatus("Automata mód kikapcsolva. A kézi felvétel továbbra is működik.","idle");
+}
+async function enableHandsFree(){
+  if(!s.configured)throw new Error("Előbb add meg a Gemini API-kulcsot.");
+  if(["recording","transcribing","waiting","playing"].includes(s.phase)||s.pending)
+    throw new Error("Előbb fejezd be a folyamatban lévő kört.");
+  if(!globalThis.CVBSilero?.MicVAD||!globalThis.CVBWav?.pcm16WavBase64)
+    throw new Error("Hiányzik a helyi Silero modell/bundle. Telepítsd a teljes v0.2.0 ZIP-et.");
+  hands.enabled=true;
+  const generation=++hands.generation;
+  await lockScreen();
+  try{
+    const vad=await globalThis.CVBSilero.MicVAD.new({
+      model:"v5",
+      processorType:"auto",
+      startOnLoad:false,
+      baseAssetPath:chrome.runtime.getURL("vendor/"),
+      onnxWASMBasePath:chrome.runtime.getURL("vendor/"),
+      positiveSpeechThreshold:0.62,
+      negativeSpeechThreshold:0.40,
+      redemptionFrames:Math.round(hands.silenceMs/32),
+      minSpeechFrames:16,
+      preSpeechPadFrames:10,
+      onSpeechStart:()=>{
+        if(!hands.enabled||hands.generation!==generation||hands.busy)return;
+        hands.speechAt=Date.now();
+        setStatus("Beszédet érzékeltem. A csend után automatikusan küldöm.","listening");
+      },
+      onVADMisfire:()=>{
+        if(hands.enabled&&!hands.busy)setStatus("Túl rövid beszéd, tovább hallgatok.","listening");
+      },
+      onFrameProcessed:()=>{
+        if(hands.enabled&&!hands.busy&&hands.speechAt&&Date.now()-hands.speechAt>120000){
+          hands.busy=true;
+          void disableHandsFree().then(()=>issue(new Error("A beszéd meghaladta a 120 másodpercet. Indítsd újra az automata módot.")));
+        }
+      },
+      onSpeechEnd:audio=>{void handleHandsSpeech(audio,generation);}
+    });
+    if(!hands.enabled||hands.generation!==generation){await vad.destroy();return;}
+    hands.vad=vad;
+    await resumeHands(generation);
+  }catch(error){
+    hands.enabled=false;hands.generation++;
+    if(hands.vad){try{await hands.vad.destroy();}catch{}hands.vad=null;}
+    await unlockScreen();
+    throw error;
+  }
+}
+async function toggleHandsFree(){
+  if(hands.starting)return;
+  hands.starting=true;
+  setStatus("Silero VAD inicializálása…","idle");
+  try{
+    if(hands.enabled)await disableHandsFree();
+    else await enableHandsFree();
+  }catch(error){issue(error);}
+  finally{hands.starting=false;setStatus($("status").textContent,s.phase);}
+}
+async function handleHandsSpeech(audio,generation){
+  if(!hands.enabled||hands.generation!==generation||hands.busy)return;
+  hands.busy=true;
+  try{
+    await pauseHands();
+    if(!hands.enabled||hands.generation!==generation)return;
+    const seconds=audio.length/globalThis.CVBWav.SAMPLE_RATE;
+    if(seconds<0.5){setStatus("Túl rövid beszéd. Folytatom a figyelést.","idle");return;}
+    if(seconds>122)throw new Error("A hang meghaladta a 120 másodperces keretet.");
+    setStatus("Gemini STT: a beszéd átirata készül…","transcribing");
+    const data=globalThis.CVBWav.pcm16WavBase64(audio);
+    const {transcript}=await message("TRANSCRIBE",{duration:Math.min(seconds,120),mime:"audio/wav",data});
+    if(!hands.enabled||hands.generation!==generation)return;
+    $("transcript").textContent="Felismert: "+transcript;
+    const command=CVB.speechCommand(transcript);
+    if(command){await handleCommand(command);return;}
+    if(s.pending){
+      setStatus("Megerősítésre váró szöveg van a mezőben. Mondd: küldd vagy töröld.","idle");
+      return;
+    }
+    putTranscript(transcript);
+    s.transcript=transcript;s.pending=true;
+    if(s.sendMode==="confirm"){
+      setStatus("Jóváhagyás szükséges. Mondd: küldd, vagy nyomd meg a Küldés gombot.","idle");
+      return;
+    }
+    await sendTranscript();
+  }catch(error){
+    if(hands.enabled&&hands.generation===generation)issue(error);
+  }finally{
+    hands.busy=false;
+    if(hands.enabled&&hands.generation===generation){
+      try{await resumeHands(generation);}catch(error){issue(error);await disableHandsFree();}
+    }
+  }
+}
+async function sendWithHalfDuplex(){
+  const generation=hands.generation;
+  const manage=hands.enabled&&!hands.busy;
+  if(manage){hands.busy=true;await pauseHands();}
+  try{await sendTranscript();}
+  finally{if(manage){hands.busy=false;await resumeHands(generation);}}
+}
+async function repeatWithHalfDuplex(){
+  const generation=hands.generation;
+  const manage=hands.enabled&&!hands.busy;
+  if(manage){hands.busy=true;await pauseHands();}
+  try{if(s.lastAnswer)await speak(s.lastAnswer);}
+  finally{if(manage){hands.busy=false;await resumeHands(generation);}}
+}
+
 async function toggleRecord(){
-  try{if(s.phase==="recording")finishRecord();else await startRecord();}
+  try{if(hands.enabled)await disableHandsFree();if(s.phase==="recording")finishRecord();else await startRecord();}
   catch(error){releaseMicrophone();issue(error);}
 }
 $("record").addEventListener("click",()=>{void toggleRecord();});
-$("send").addEventListener("click",()=>{void sendTranscript().catch(issue);});
+$("hands").addEventListener("click",()=>{void toggleHandsFree();});
+$("send").addEventListener("click",()=>{void sendWithHalfDuplex().catch(issue);});
 $("stop").addEventListener("click",stopSpeech);
-$("repeat").addEventListener("click",()=>{void speak(s.lastAnswer).catch(issue);});
+$("repeat").addEventListener("click",()=>{void repeatWithHalfDuplex().catch(issue);});
 $("settings").addEventListener("click",()=>{void message("OPEN_OPTIONS").catch(issue);});
 chrome.runtime.onMessage.addListener((request,sender,reply)=>{
   if(request?.type==="TOGGLE_RECORD"){void toggleRecord();reply({ok:true});}
   if(request?.type==="STOP_SPEECH"){stopSpeech();reply({ok:true});}
 });
-window.addEventListener("pagehide",()=>{releaseMicrophone();clearAudio();});
+window.addEventListener("pagehide",()=>{void disableHandsFree();releaseMicrophone();clearAudio();});
 void init();
 })();
