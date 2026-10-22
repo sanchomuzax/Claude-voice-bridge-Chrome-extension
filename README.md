@@ -1,5 +1,18 @@
 # Claude Voice Bridge
 
+## v0.3.0 • Claude panel, hangjelzések és modellkatalógus
+
+- A panel a **jobb felső sarokban**, keskeny oldalsó fogantyúval becsukható és kinyitható. A bezárt állapot megmarad újratöltés után.
+- A Claude világos/sötét rendszermegjelenítéséhez igazodó színek, a Claude oldaláról örökölt betűtípus (ha a böngésző elérhetővé teszi).
+- Két diszkrét hangjelzés: hallgatás kezdete (emelkedő), feldolgozás kezdete (mélyülő). Bekapcsolás külön állítható.
+- Két közvetlen csúszka: a Silero **zajküszöbe** és a beszéd utáni **csend** időtartama. Aktív automata módban a Silero újraindul a beállítás frissítéséhez.
+- A Gemini modell- és hanglistát a Google API szolgáltatja a saját kulcsoddal; a modellnevek mellett **dátumozott hivatalos árak** jelennek meg, nem kitalált API-áradatok. Ha az API nem válaszol, a dokumentált alaplista jelenik meg, figyelmeztetéssel.
+- A TTS már a Claude válaszának látható szövegrészét olvassa, a rendszer felületi címkéit és a megismételt kezdőmondatot kiszűri.
+
+**Telepítés Quettába:** [Claude-Voice-Bridge-v0.3.0.zip](Claude-Voice-Bridge-v0.3.0.zip). A v0.1.0 és v0.2.0 archívumok megmaradnak.
+
+---
+
 ## v0.2.0 kéz nélküli mód (fejlesztési változat)
 
 - **Automata: be/ki** gomb a claude.ai oldalán. Első aktiváláskor a helyi **Silero VAD v5** betöltődik az ONNX/WASM csomagból.
@@ -8,7 +21,7 @@
 - Megerősítéses módban a **„küldd”** vagy **„töröld”** hangparancs használható. A felolvasás megismétlésére az **„ismételd”**, kikapcsolásra a **„vége”** parancs szolgál.
 - Induláskor mindig **kikapcsolt**. A korábbi kézi push-to-talk mód változatlanul megmarad. Mikrofonnal kapcsolatos hiba esetén kézi módra lehet visszatérni.
 - **Nem autós használatra hitelesített.** A Quetta ONNX/WASM és audio-worklet támogatását valódi eszközön még ellenőrizni kell. A munkamenet a böngésző előterében működik, háttérben nem garantált.
-- **Fontos:** a régi v0.1.0 ZIP nem tartalmazza a Silero modellt. A kéz nélküli módhoz a **[Claude-Voice-Bridge-v0.2.0.zip](Claude-Voice-Bridge-v0.2.0.zip)** telepítése szükséges. Ez a fájl a GitHub Actions sikeres buildje után jelenik meg.
+- **Fontos:** a régi v0.1.0 ZIP nem tartalmazza a Silero modellt. A kéz nélküli módhoz a **[Claude-Voice-Bridge-v0.3.0.zip](Claude-Voice-Bridge-v0.2.0.zip)** telepítése szükséges. Ez a fájl a GitHub Actions sikeres buildje után jelenik meg.
 
 ### Fejlesztői build
 
