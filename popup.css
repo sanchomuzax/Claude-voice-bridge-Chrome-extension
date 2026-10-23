@@ -25,7 +25,9 @@ h1{margin:0;font-size:18px;font-weight:720;line-height:1.2;letter-spacing:-.35px
 .updates .update-hint{font-size:11px;color:#775f51;line-height:1.45}
 #updateActions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin:10px 0}
 #updateActions[hidden]{display:none}
-#releaseLink{color:#ae542f;font-size:12px}
+#releaseLink,#zipDownload{color:#ae542f;font-size:12px}
+#zipDownload[hidden]{display:none}
+#zipDownload{display:inline-block;padding:6px 9px;border:1px solid currentColor;border-radius:7px}
 .small-button{background:transparent;border:1px solid #d4c5b9;border-radius:7px;color:inherit;font:600 11px system-ui;cursor:pointer;padding:7px 9px;min-height:31px}
 .small-button:hover{border-color:#b76542}
 .small-button:disabled{opacity:.55;cursor:wait}
