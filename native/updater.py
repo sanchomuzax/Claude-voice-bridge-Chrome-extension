@@ -25,7 +25,7 @@ MAX_DOWNLOAD = 100 * 1024 * 1024
 MAX_EXTRACT = 240 * 1024 * 1024
 VALID_VERSION = re.compile(r"^\d+\.\d+\.\d+$")
 STATIC_FILES = {
-    "manifest.json", "background.js", "content.js", "shared.js",
+    "FRISSITES.bat", "manifest.json", "background.js", "content.js", "shared.js",
     "vad-codec.js", "panel-ui.js", "selectors.json",
     "options.html", "options.js", "popup.html", "popup.js", "popup.css",
     "ui.css", "dist/vad-bundle.js", "vendor/silero_vad_v5.onnx",
