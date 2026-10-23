@@ -52,7 +52,7 @@ test("STT server rejection also stops chime immediately and propagates error",as
 test("both manual and hands-free capture call the same STT chime helper",()=>{
  const matches=source.match(/await transcribeWithChime\(/g)||[];
  assert.equal(matches.length,2);
- assert.match(source,/async function processRecorded\(mime\)[\s\S]*?await transcribeWithChime\(\{duration:Math\.min\(seconds,120\),mime,data\}\)/);
+ assert.match(source,/async function processRecorded\(mime\)[\s\S]*?await transcribeWithChime\(\{duration:Math\.min\(seconds,120\),mime:resolvedMime,data\}\)/);
  assert.match(source,/async function handleHandsSpeech\(audio,generation\)[\s\S]*?await transcribeWithChime\(\{duration:Math\.min\(seconds,120\),mime:"audio\/wav",data\}\)/);
  assert.equal((source.match(/await message\("TRANSCRIBE"/g)||[]).length,1,"Only the shared chime wrapper may call TRANSCRIBE directly");
 });
