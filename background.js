@@ -251,28 +251,6 @@ chrome.runtime.onConnect?.addListener(port=>{
       .catch(error=>reply({type:"RESULT",ok:false,error:String(error?.message||error).slice(0,300)}));
   });
 });
-/* Content scripts cannot read chrome.storage.local: the Gemini key is
- * deliberately restricted to trusted contexts. Push a key-free invalidation
- * signal through extension ports, then let each HUD request sanitized settings.
- */
-const settingsPorts=new Set();
-chrome.runtime.onConnect?.addListener(port=>{
-  if(port.name!=="cvb-settings")return;
-  const page=String(port.sender?.url||port.sender?.tab?.url||"");
-  if(!page.startsWith("https://claude.ai/"))return;
-  settingsPorts.add(port);
-  port.onDisconnect.addListener(()=>settingsPorts.delete(port));
-});
-chrome.storage.onChanged?.addListener((changes,area)=>{
-  if(area!=="local")return;
-  // Usage accounting does not invalidate configuration.
-  if(!Object.keys(changes).some(key=>key==="apiKey"||exposed.includes(key)))return;
-  for(const port of settingsPorts){
-    try{port.postMessage({type:"SETTINGS_UPDATED"});}
-    catch{settingsPorts.delete(port);}
-  }
-});
-
 /* Extension updates: the browser can discover a release, but cannot alter
  * its own unpacked files. The optional Windows native host installs the
  * published, checksum-verified ZIP into the fixed unpacked folder.
@@ -398,6 +376,28 @@ chrome.alarms?.onAlarm.addListener(alarm=>{
 // A version check also runs when the worker first starts on an existing
 // installation. Avoid doing network work inside a time-critical audio handler.
 void cvbSavedStatus().then(cvbRefreshBadge).catch(()=>{});
+
+/* Content scripts cannot read chrome.storage.local: the Gemini key is
+ * deliberately restricted to trusted contexts. Push a key-free invalidation
+ * signal through extension ports, then let each HUD request sanitized settings.
+ */
+const settingsPorts=new Set();
+chrome.runtime.onConnect?.addListener(port=>{
+  if(port.name!=="cvb-settings")return;
+  const page=String(port.sender?.url||port.sender?.tab?.url||"");
+  if(!page.startsWith("https://claude.ai/"))return;
+  settingsPorts.add(port);
+  port.onDisconnect.addListener(()=>settingsPorts.delete(port));
+});
+chrome.storage.onChanged?.addListener((changes,area)=>{
+  if(area!=="local")return;
+  // Usage accounting does not invalidate configuration.
+  if(!Object.keys(changes).some(key=>key==="apiKey"||exposed.includes(key)))return;
+  for(const port of settingsPorts){
+    try{port.postMessage({type:"SETTINGS_UPDATED"});}
+    catch{settingsPorts.delete(port);}
+  }
+});
 
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   if(!message||typeof message.type!=="string")return;
