@@ -217,10 +217,11 @@ async function updateUiSettings(values){
  * gaps while retaining automatic shutdown after the task ends.
  */
 function keepWorkerAlive(task){
+  cvbActiveAudio++;
   const timer=setInterval(()=>{
     try{const pending=chrome.runtime.getPlatformInfo();pending?.catch?.(()=>{});}catch{}
   },20000);
-  return Promise.resolve(task).finally(()=>clearInterval(timer));
+  return Promise.resolve(task).finally(()=>{clearInterval(timer);cvbActiveAudio--;});
 }
 /* A dedicated long-lived Port avoids pinning a large STT/TTS result on a
  * single one-shot sendMessage response. Only the claude.ai content script may
@@ -272,6 +273,132 @@ chrome.storage.onChanged?.addListener((changes,area)=>{
   }
 });
 
+/* Extension updates: the browser can discover a release, but cannot alter
+ * its own unpacked files. The optional Windows native host installs the
+ * published, checksum-verified ZIP into the fixed unpacked folder.
+ * Neither a web page nor a content script may invoke native installation.
+ */
+const CVB_REPOSITORY="sanchomuzax/Claude-voice-bridge-Chrome-extension";
+const CVB_RELEASE_API="https://api.github.com/repos/"+CVB_REPOSITORY+"/releases/latest";
+const CVB_NATIVE_HOST="com.sancho.cvb_updater";
+const CVB_UPDATE_ALARM="cvb-release-check";
+let cvbChecking=null,cvbInstalling=null,cvbActiveAudio=0;
+function cvbSemver(value){
+  const m=/^v?(\d+)\.(\d+)\.(\d+)$/.exec(String(value||""));
+  return m?[Number(m[1]),Number(m[2]),Number(m[3])]:null;
+}
+function cvbIsNewer(remote,local){
+  const a=cvbSemver(remote),b=cvbSemver(local);
+  if(!a||!b)return false;
+  for(let i=0;i<3;i++)if(a[i]!==b[i])return a[i]>b[i];
+  return false;
+}
+async function cvbSavedStatus(){
+  const data=await chrome.storage.local.get(["cvbAvailableUpdate","cvbCheckedAt","cvbUpdateError","cvbAutoInstall"]);
+  const local=chrome.runtime.getManifest().version;
+  const available=data.cvbAvailableUpdate;
+  return {
+    localVersion:local,
+    latestVersion:available?.version||local,
+    available:Boolean(available&&cvbIsNewer(available.version,local)),
+    releaseUrl:available?.releaseUrl||"https://github.com/"+CVB_REPOSITORY+"/releases/latest",
+    checkedAt:data.cvbCheckedAt||null,
+    error:data.cvbUpdateError||"",
+    autoInstall:data.cvbAutoInstall===true
+  };
+}
+async function cvbRefreshBadge(status){
+  try{
+    await chrome.action?.setBadgeText({text:status.available?"UPD":""});
+    if(status.available)await chrome.action?.setBadgeBackgroundColor({color:"#bf643f"});
+  }catch{}
+}
+async function cvbCheckUpdate(){
+  if(cvbChecking)return cvbChecking;
+  cvbChecking=(async()=>{
+    try{
+      const response=await fetch(CVB_RELEASE_API,{
+        headers:{"Accept":"application/vnd.github+json"},
+        cache:"no-store",signal:AbortSignal.timeout(16000)
+      });
+      if(!response.ok)throw new Error("GitHub Releases HTTP "+response.status);
+      const release=await response.json();
+      const version=String(release.tag_name||"").replace(/^v/,"");
+      if(!cvbSemver(version)||release.draft||release.prerelease)
+        throw new Error("A GitHub nem érvényes stabil verziót adott.");
+      const local=chrome.runtime.getManifest().version;
+      const available=cvbIsNewer(version,local);
+      const asset="Claude-Voice-Bridge-v"+version+".zip";
+      const zip=(release.assets||[]).find(x=>x.name===asset);
+      const checksum=(release.assets||[]).find(x=>x.name===asset+".sha256");
+      const url="https://github.com/"+CVB_REPOSITORY+"/releases/tag/v"+version;
+      if(available&&(!zip||!checksum))
+        throw new Error("Az új kiadás ZIP-je vagy SHA-256 ellenőrzőösszege még nincs kész.");
+      const update=available?{version,releaseUrl:url}:null;
+      await chrome.storage.local.set({cvbAvailableUpdate:update,cvbCheckedAt:Date.now(),cvbUpdateError:""});
+      const status=await cvbSavedStatus();
+      await cvbRefreshBadge(status);
+      if(status.available&&status.autoInstall&&cvbActiveAudio===0)
+        void cvbInstallUpdate().catch(async error=>{
+          await chrome.storage.local.set({cvbUpdateError:String(error?.message||error).slice(0,250)});
+        });
+      return status;
+    }catch(error){
+      await chrome.storage.local.set({cvbUpdateError:String(error?.message||error).slice(0,250),cvbCheckedAt:Date.now()});
+      return cvbSavedStatus();
+    }
+  })().finally(()=>{cvbChecking=null;});
+  return cvbChecking;
+}
+async function cvbInstallUpdate(){
+  if(cvbInstalling)return cvbInstalling;
+  cvbInstalling=(async()=>{
+    if(cvbActiveAudio>0)throw new Error("Hangfeldolgozás van folyamatban. Frissíts utána.");
+    const status=await cvbSavedStatus();
+    if(!status.available)throw new Error("Nincs telepíthető új verzió.");
+    const version=status.latestVersion;
+    const reply=await new Promise((resolve,reject)=>{
+      if(!chrome.runtime.sendNativeMessage){
+        reject(new Error("Ez a böngésző nem támogatja a Native Messaging frissítőt."));return;
+      }
+      try{
+        chrome.runtime.sendNativeMessage(CVB_NATIVE_HOST,{cmd:"install",version},value=>{
+          const error=chrome.runtime.lastError?.message;
+          if(error)return reject(new Error("A Windowsos frissítő nincs telepítve vagy nem érhető el: "+error));
+          if(!value?.ok)return reject(new Error(value?.error||"A telepítés nem sikerült."));
+          resolve(value);
+        });
+      }catch(error){reject(error);}
+    });
+    if(reply.version!==version)throw new Error("A Native Messaging segéd eltérő verziót jelentett.");
+    await chrome.storage.local.set({cvbAvailableUpdate:null,cvbUpdateError:""});
+    await cvbRefreshBadge({available:false});
+    // Respond to popup before reloading the extension. The claude.ai tab
+    // still needs its own reload to reinject the content script.
+    setTimeout(()=>chrome.runtime.reload(),1200);
+    return {ok:true,version,reloading:true};
+  })().finally(()=>{cvbInstalling=null;});
+  return cvbInstalling;
+}
+async function cvbSetAutoInstall(enabled){
+  await chrome.storage.local.set({cvbAutoInstall:enabled===true});
+  return cvbSavedStatus();
+}
+chrome.runtime.onInstalled.addListener(()=>{
+  try{chrome.alarms?.create(CVB_UPDATE_ALARM,{periodInMinutes:60,delayInMinutes:1});}catch{}
+  void cvbCheckUpdate();
+});
+chrome.runtime.onStartup.addListener(()=>{
+  try{chrome.alarms?.create(CVB_UPDATE_ALARM,{periodInMinutes:60,delayInMinutes:1});}catch{}
+  void cvbCheckUpdate();
+});
+chrome.alarms?.onAlarm.addListener(alarm=>{
+  if(alarm.name===CVB_UPDATE_ALARM)void cvbCheckUpdate();
+});
+// A version check also runs when the worker first starts on an existing
+// installation. Avoid doing network work inside a time-critical audio handler.
+void cvbSavedStatus().then(cvbRefreshBadge).catch(()=>{});
+
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   if(!message||typeof message.type!=="string")return;
   const page=String(sender.url||sender.tab?.url||"");
@@ -284,6 +411,10 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
       return {settings:Object.fromEntries(exposed.map(k=>[k,config[k]])),configured:!!config.apiKey};
     }
     if(message.type==="GET_STATUS")return {usage:await getUsage()};
+    if(message.type==="GET_UPDATE_STATUS"&&isExtension)return {update:await cvbSavedStatus()};
+    if(message.type==="CHECK_UPDATE"&&isExtension)return {update:await cvbCheckUpdate()};
+    if(message.type==="SET_AUTO_INSTALL"&&isExtension)return {update:await cvbSetAutoInstall(message.enabled)};
+    if(message.type==="INSTALL_UPDATE"&&isExtension)return cvbInstallUpdate();
     if(message.type==="GET_CATALOG"&&isExtension)return officialCatalog();
     if(message.type==="PREVIEW_TTS"&&isExtension){
       const text=String(message.text||"").trim();
