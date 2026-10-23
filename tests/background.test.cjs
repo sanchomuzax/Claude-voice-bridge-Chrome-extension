@@ -18,7 +18,7 @@ function makeWorker(respondFetch){
       tabs:{query:async()=>[]}
     },
     fetch:respondFetch,
-    AbortSignal,atob,URL,setTimeout,clearTimeout,Uint8Array,Intl,Date,Promise,Error,TypeError
+    AbortSignal,atob,URL,setTimeout,clearTimeout,setInterval,clearInterval,Uint8Array,Intl,Date,Promise,Error,TypeError
   };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname,"..","background.js"),"utf8"),ctx);
   function send(req,url="https://claude.ai/chat/example",extension=false){
