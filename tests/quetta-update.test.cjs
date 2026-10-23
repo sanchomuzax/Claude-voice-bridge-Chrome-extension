@@ -16,8 +16,8 @@ function harness(userAgent){
  vm.runInNewContext("const $=id=>document.getElementById(id);\n"+source.slice(start,end)+"\nglobalThis.render=showUpdate;",context);
  return {elements,render:context.render};
 }
-const state={available:true,localVersion:"0.5.16",latestVersion:"0.5.17",
- releaseUrl:"https://github.com/sanchomuzax/Claude-voice-bridge-Chrome-extension/releases/tag/v0.5.17",
+const state={available:true,localVersion:"0.5.17",latestVersion:"0.5.18",
+ releaseUrl:"https://github.com/sanchomuzax/Claude-voice-bridge-Chrome-extension/releases/tag/v0.5.18",
  checkedAt:null,error:""};
 test("Android Quetta update shows actual version-specific ZIP URL",async()=>{
  assert.match(html,/id="zipDownload"[^>]+hidden/);
@@ -25,14 +25,14 @@ test("Android Quetta update shows actual version-specific ZIP URL",async()=>{
  await h.render(state);
  assert.equal(h.elements.get("zipDownload").hidden,false);
  assert.equal(h.elements.get("zipDownload").href,
-  "https://github.com/sanchomuzax/Claude-voice-bridge-Chrome-extension/releases/download/v0.5.17/Claude-Voice-Bridge-v0.5.17.zip");
+  "https://github.com/sanchomuzax/Claude-voice-bridge-Chrome-extension/releases/download/v0.5.18/Claude-Voice-Bridge-v0.5.18.zip");
  assert.equal(h.elements.get("updateActions").hidden,false);
  assert.match(h.elements.get("installHint").textContent,/Quetta.*importáld/);
 });
 test("No update, invalid versions and desktop never show ZIP action",async()=>{
  for(const [ua,changed] of [
   ["Mozilla/5.0 (Linux; Android 16)",{available:false}],
-  ["Mozilla/5.0 (Linux; Android 16)",{latestVersion:"0.5.17x"}],
+  ["Mozilla/5.0 (Linux; Android 16)",{latestVersion:"0.5.18x"}],
   ["Mozilla/5.0 (Windows NT 10.0)",{}]
  ]){
   const h=harness(ua);
