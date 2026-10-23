@@ -63,7 +63,8 @@ foreach ($item in $browsers) {
     $vendor = if ($item -eq "Edge") { "Microsoft\Edge" } else { "Google\Chrome" }
     $keyPath = "HKCU:\Software\$vendor\NativeMessagingHosts\$hostName"
     New-Item -Path $keyPath -Force | Out-Null
-    (Get-Item -LiteralPath $keyPath).SetValue("", $hostManifest, [Microsoft.Win32.RegistryValueKind]::String)
+    # Set-Item writes the registry key default value; Get-Item returns a read-only RegistryKey.
+    Set-Item -LiteralPath $keyPath -Value $hostManifest
     Write-Host "Native Messaging regisztrálva: $item"
 }
 Write-Host "Telepítési mappa: $folder"
