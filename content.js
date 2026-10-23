@@ -33,7 +33,7 @@ const message=async(type,data={})=>{
     try{return await attempt();}
     catch(error){
       const disconnected=Boolean(error.transport)&&
-        /receiving end does not exist|could not establish connection|message port closed|extension context invalidated/i.test(error.message);
+        /receiving end does not exist|could not establish connection|message port closed|extension context invalidated|nem érkezett válasz/i.test(error.message);
       if(disconnected&&readOnly&&n<2){await sleep(250*(n+1));continue;}
       if(disconnected)throw new Error("Az Edge nem éri el a Bridge háttérfolyamatát. Nem STT- vagy mikrofonhiba; ellenőrizd a bővítmény service workerét az edge://extensions oldalon. ("+error.message+")");
       throw error;
