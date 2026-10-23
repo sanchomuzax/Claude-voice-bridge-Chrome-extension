@@ -123,7 +123,7 @@ test("tool response watcher waits for real Markdown, not intermediate labels",()
  assert.match(content,/if\(!roots\.length\)return ""/);
  assert.match(content,/CVB\.isToolStatus/);
  assert.match(content,/pendingToolApproval\(\)/);
- assert.match(content,/now-changedAt>=2600/);
+ assert.match(content,/const stableMs=sawGeneration\?2600:9500/);
 });
 
 
