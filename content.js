@@ -341,19 +341,27 @@ async function speak(raw){
   const parts=CVB.splitForTts(raw,500).slice(0,60);
   if(!parts.length){setStatus("Nem található felolvasható szöveg.","idle");return;}
   setStatus("Felolvasás…","playing");
-  for(const part of parts){
-    if(token!==s.playToken)return;
-    try{
-      const output=await message("SYNTHESIZE",{text:part});
+  if(hands.enabled&&hands.busy&&barge.enabled)await armBargeDuringTts();
+  try{
+    for(const part of parts){
       if(token!==s.playToken)return;
-      await playBlob(decodeAudio(output.data,output.mime),token);
-    }catch(error){
-      if(token!==s.playToken)return;
-      setStatus("Gemini TTS-hiba, beépített felolvasás: "+String(error?.message||error).slice(0,90),"playing");
-      await fallbackSpeak(part,token);
+      try{
+        const output=await message("SYNTHESIZE",{text:part});
+        if(token!==s.playToken)return;
+        await playBlob(decodeAudio(output.data,output.mime),token);
+      }catch(error){
+        if(token!==s.playToken)return;
+        // Native system TTS cannot be reliably ducked in Quetta.
+        // On fallback restore half-duplex before system audio begins.
+        if(barge.monitoring)await disarmBargeDuringTts();
+        setStatus("Gemini TTS-hiba, beépített felolvasás: "+String(error?.message||error).slice(0,90),"playing");
+        await fallbackSpeak(part,token);
+      }
     }
+    if(token===s.playToken)setStatus("Válasz felolvasva. Indíthatod a következő beszédet.","idle");
+  }finally{
+    if(barge.monitoring)await disarmBargeDuringTts();
   }
-  if(token===s.playToken)setStatus("Válasz felolvasva. Indíthatod a következő beszédet.","idle");
 }
 function clearPendingTranscript(){
   const node=editor();
@@ -470,6 +478,9 @@ async function enableHandsFree(){
     const vad=await globalThis.CVBSilero.MicVAD.new({
       model:"v5",
       processorType:"auto",
+      getStream:()=>navigator.mediaDevices.getUserMedia({audio:{
+        channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true
+      }}),
       startOnLoad:false,
       baseAssetPath:chrome.runtime.getURL("vendor/"),
       onnxWASMBasePath:chrome.runtime.getURL("vendor/"),
@@ -479,20 +490,56 @@ async function enableHandsFree(){
       minSpeechFrames:16,
       preSpeechPadFrames:10,
       onSpeechStart:()=>{
-        if(!hands.enabled||hands.generation!==generation||hands.busy)return;
+        if(!hands.enabled||hands.generation!==generation)return;
+        if(barge.monitoring&&barge.enabled&&hands.busy&&s.phase==="playing"){
+          barge.candidateAt=Date.now();barge.highFrames=0;
+          // Temporarily duck the Gemini audio. If actual user speech is still
+          // detected after 300 ms, the interruption is confirmed.
+          if(s.audio)s.audio.volume=0.12;
+          return;
+        }
+        if(hands.busy)return;
         hands.speechAt=Date.now();
         setStatus("Beszédet érzékeltem. A csend után automatikusan küldöm.","listening");
       },
       onVADMisfire:()=>{
+        if(barge.confirmed){
+          barge.confirmed=false;resetBargeCandidate();
+          if(!hands.busy)void resumeHands(generation).catch(issue);
+          return;
+        }
+        if(barge.monitoring){resetBargeCandidate();return;}
         if(hands.enabled&&!hands.busy)setStatus("Túl rövid beszéd, tovább hallgatok.","listening");
       },
-      onFrameProcessed:()=>{
-        if(hands.enabled&&!hands.busy&&hands.speechAt&&Date.now()-hands.speechAt>120000){
+      onFrameProcessed:probabilities=>{
+        if(!hands.enabled||hands.generation!==generation)return;
+        if(barge.monitoring&&barge.candidateAt&&!barge.confirmed){
+          const strong=Number(probabilities?.isSpeech||0)>=Math.max(0.65,hands.threshold);
+          barge.highFrames=strong?barge.highFrames+1:0;
+          if(CVB.bargeSpeechConfirmed(Date.now()-barge.candidateAt,barge.highFrames)){
+            barge.confirmed=true;barge.confirmedAt=Date.now();barge.monitoring=false;
+            stopSpeech();
+            setStatus("Közbevágás érzékelve. Hallgatlak…","interrupting");
+          }
+        }
+        if(barge.confirmed&&Date.now()-barge.confirmedAt>120000){
+          void disableHandsFree().then(()=>issue(new Error("A közbevágás túl hosszú volt.")));
+        }else if(!hands.busy&&hands.speechAt&&Date.now()-hands.speechAt>120000){
           hands.busy=true;
-          void disableHandsFree().then(()=>issue(new Error("A beszéd meghaladta a 120 másodpercet. Indítsd újra az automata módot.")));
+          void disableHandsFree().then(()=>issue(new Error("A beszéd meghaladta a 120 másodpercet.")));
         }
       },
-      onSpeechEnd:audio=>{void handleHandsSpeech(audio,generation);}
+      onSpeechEnd:audio=>{
+        if(!hands.enabled||hands.generation!==generation)return;
+        if(barge.confirmed){
+          barge.confirmed=false;barge.queuedAudio=audio;resetBargeCandidate();
+          // Wait for in-flight Claude/TTS loop to unwind before STT.
+          if(!hands.busy)consumeBargeAudio(generation);
+          return;
+        }
+        if(barge.monitoring){resetBargeCandidate();return;}
+        void handleHandsSpeech(audio,generation);
+      }
     });
     if(!hands.enabled||hands.generation!==generation){await vad.destroy();return;}
     hands.vad=vad;
@@ -548,7 +595,10 @@ async function handleHandsSpeech(audio,generation){
   }finally{
     hands.busy=false;
     if(hands.enabled&&hands.generation===generation){
-      try{await resumeHands(generation);}catch(error){issue(error);await disableHandsFree();}
+      if(barge.queuedAudio){consumeBargeAudio(generation);}
+      else if(!barge.confirmed){
+        try{await resumeHands(generation);}catch(error){issue(error);await disableHandsFree();}
+      }
     }
   }
 }
@@ -557,14 +607,26 @@ async function sendWithHalfDuplex(){
   const manage=hands.enabled&&!hands.busy;
   if(manage){hands.busy=true;await pauseHands();}
   try{await sendTranscript();}
-  finally{if(manage){hands.busy=false;await resumeHands(generation);}}
+  finally{
+    if(manage){
+      hands.busy=false;
+      if(barge.queuedAudio)consumeBargeAudio(generation);
+      else if(!barge.confirmed)await resumeHands(generation);
+    }
+  }
 }
 async function repeatWithHalfDuplex(){
   const generation=hands.generation;
   const manage=hands.enabled&&!hands.busy;
   if(manage){hands.busy=true;await pauseHands();}
   try{if(s.lastAnswer)await speak(s.lastAnswer);}
-  finally{if(manage){hands.busy=false;await resumeHands(generation);}}
+  finally{
+    if(manage){
+      hands.busy=false;
+      if(barge.queuedAudio)consumeBargeAudio(generation);
+      else if(!barge.confirmed)await resumeHands(generation);
+    }
+  }
 }
 
 async function toggleRecord(){
