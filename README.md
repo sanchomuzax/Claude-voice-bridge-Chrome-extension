@@ -4,9 +4,9 @@
 
 A Claude Voice Bridge egy böngészőbővítmény a [claude.ai](https://claude.ai/) használatához. A mikrofonról felvett magyar beszédet a Google Gemini alakítja szöveggé, a bővítmény elküldi a Claude webes felületén, majd a választ magyarul felolvassa. **Nem használ Claude API-t.**
 
-![Claude Voice Bridge v0.5.3: feliratozott HUD, jól látható Beállítások gomb](docs/images/hud-v053-preview.png)
+![Claude Voice Bridge v0.5.4: feliratozott HUD, jól látható Beállítások gomb](docs/images/hud-v054-preview.png)
 
-*A v0.5.3 HUD forrásából készített, mintatartalmat használó előnézet. Nem tartalmaz valódi beszélgetést vagy API-kulcsot.*
+*A v0.5.4 HUD forrásából készített, mintatartalmat használó előnézet. Nem tartalmaz valódi beszélgetést vagy API-kulcsot.*
 
 ## Mire képes?
 
