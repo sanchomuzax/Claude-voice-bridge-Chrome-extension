@@ -22,7 +22,7 @@ const message=(type,data={})=>new Promise((resolve,reject)=>{
 });
 const wrapper=document.createElement("div");
 wrapper.id="claude-voice-bridge";
-wrapper.style.cssText="position:fixed;z-index:2147483646;right:0;top:calc(env(safe-area-inset-top, 0px) + 8px);max-width:calc(100vw - 44px)";
+wrapper.style.cssText="position:fixed;z-index:2147483646;right:0;top:calc(env(safe-area-inset-top, 0px) + 8px);max-width:calc(100vw - 44px);pointer-events:none";
 wrapper.style.fontFamily=getComputedStyle(document.body).fontFamily;
 const shadow=wrapper.attachShadow({mode:"closed"});
 shadow.innerHTML=globalThis.CVBPanel;
