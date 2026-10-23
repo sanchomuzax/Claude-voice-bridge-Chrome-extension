@@ -769,7 +769,7 @@ function playCue(type){
  * thereafter. It has a dedicated Audio instance, so it cannot take over
  * Claude's TTS player or the one-off listen/process beeps.
  */
-const waitChime={token:null,delay:null,interval:null,player:null,url:null};
+const waitChime={token:null,delay:null,interval:null,player:null,url:null,oscillators:[]};
 function makeWaitChimeWav(){
   if(waitChime.url)return waitChime.url;
   const sampleRate=22050,noteLength=0.087,gap=0.035;
@@ -815,7 +815,7 @@ function playWaitChime(token,signal){
       // Fall back to WebAudio if Quetta blocks a new media player.
       try{
         primeAudio();await cueContext?.resume();
-        if(cueContext?.state!=="running")return;
+        if(waitChime.token!==token||signal.aborted||cueContext?.state!=="running")return;
         const start=cueContext.currentTime+0.02;
         for(const [i,freq] of [665,820,720,555].entries()){
           if(waitChime.token!==token)return;
@@ -826,8 +826,12 @@ function playWaitChime(token,signal){
           g.gain.linearRampToValueAtTime(0.016,at+0.025);
           g.gain.exponentialRampToValueAtTime(0.0001,at+0.085);
           o.connect(g).connect(cueContext.destination);
+          waitChime.oscillators.push(o);
           o.start(at);o.stop(at+0.09);
-          o.onended=()=>{o.disconnect();g.disconnect();};
+          o.onended=()=>{
+            waitChime.oscillators=waitChime.oscillators.filter(item=>item!==o);
+            o.disconnect();g.disconnect();
+          };
         }
       }catch{}
     });
@@ -840,10 +844,16 @@ function stopWaitChime(owner=null){
   if(waitChime.delay!==null){clearTimeout(waitChime.delay);waitChime.delay=null;}
   if(waitChime.interval!==null){clearInterval(waitChime.interval);waitChime.interval=null;}
   if(waitChime.player){
-    waitChime.player.pause();
-    waitChime.player.removeAttribute("src");
-    waitChime.player.load();
+    try{
+      waitChime.player.pause();
+      waitChime.player.removeAttribute("src");
+      waitChime.player.load();
+    }catch{}
   }
+  for(const osc of waitChime.oscillators){
+    try{osc.stop();osc.disconnect();}catch{}
+  }
+  waitChime.oscillators=[];
 }
 function startWaitChime(token,signal){
   stopWaitChime();
