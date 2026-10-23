@@ -90,5 +90,5 @@ test("web content cannot request native update or settings changes",()=>{
  assert.match(handler,/message.type==="INSTALL_UPDATE"&&isExtension/);
  assert.match(handler,/message.type==="SET_AUTO_INSTALL"&&isExtension/);
  assert.match(handler,/message.type==="CHECK_UPDATE"&&isExtension/);
- assert.match(source,/api.github.com\/repos\/.*?\/releases\/latest/);
+ assert.match(source,/const CVB_RELEASE_API="https:\/\/api.github.com\/repos\/"/);
 });
