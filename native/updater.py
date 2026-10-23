@@ -166,8 +166,13 @@ def install_release(extension_dir, version):
             # Update manifest last, after all implementation assets are installed.
             for name in sorted(paths, key=lambda item: item == "manifest.json"):
                 destination = target.joinpath(*PurePosixPath(name).parts)
-                if destination.is_symlink():
-                    raise ValueError("Szimbolikus link a telepítési célhelyen: " + name)
+                # Reject symlinked parents too. Otherwise vendor/foo.wasm could
+                # escape into an unrelated folder via a symlinked vendor dir.
+                for ancestor in [destination, *list(destination.parents)]:
+                    if ancestor == target:
+                        break
+                    if ancestor.is_symlink():
+                        raise ValueError("Szimbolikus link a telepítési célhelyen: " + name)
                 destination.parent.mkdir(parents=True, exist_ok=True)
                 previous = backup.joinpath(*PurePosixPath(name).parts)
                 existed = destination.exists()
