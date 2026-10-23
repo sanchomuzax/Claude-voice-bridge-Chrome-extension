@@ -31,14 +31,12 @@ test("GET_SETTINGS recovers from a transient missing Edge service-worker receive
  assert.equal(calls,3);
 });
 
-test("charged TRANSCRIBE is never auto-replayed on a broken Edge message channel",async()=>{
- let calls=0;
- const message=makeMessaging((payload,cb,runtime)=>{
-   assert.equal(payload.type,"TRANSCRIBE");calls++;
-   runtime.lastError={message:"Could not establish connection. Receiving end does not exist."};cb();runtime.lastError=null;
- });
- await assert.rejects(message("TRANSCRIBE",{data:"fake"}),/Edge.*háttérfolyamatát/);
- assert.equal(calls,1);
+test("charged TRANSCRIBE uses dedicated Port rather than retried sendMessage",()=>{
+ assert.match(source,/if\(type==="TRANSCRIBE"\|\|type==="SYNTHESIZE"\)return longAudioMessage\(type,data\)/);
+ const helper=source.slice(source.indexOf("function longAudioMessage("),source.indexOf("const message=async("));
+ assert.match(helper,/chrome\.runtime\.connect\(\{name:"cvb-audio-task"\}\)/);
+ assert.match(helper,/port\.postMessage\(\{type:"REQUEST",task:type,data\}\)/);
+ assert.doesNotMatch(helper,/sendMessage/);
 });
 
 test("real Gemini API errors are not masked as worker-reconnect failures",async()=>{

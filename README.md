@@ -39,6 +39,8 @@ A mindenkori telepíthető ZIP a **[GitHub Releases](https://github.com/sanchomu
 
 **Asztali Microsoft Edge:** csomagold ki a ZIP-et, majd `edge://extensions` → *Fejlesztői mód* → *Kicsomagolt betöltése* (*Load unpacked*). A TTS-minta meghallgatása önmagában nem ellenőrzi a mikrofont vagy az STT-t; a Claude-oldali **Felvétel** gomb külön kommunikációs és mikrofonellenőrzést végez.
 
+**Edge / Manifest V3 háttérfolyamat:** a hosszabb Gemini STT- és TTS-műveletek külön `cvb-audio-task` Port-kapcsolaton futnak, 20 másodpercenkénti életjellel. A háttérfolyamat a feldolgozás alatt célzott életben tartást használ, azután felszabadul. Megszakadt kapcsolat esetén a bővítmény látható hibát ad; a korábban elküldött fizetős hangkérést nem indítja újra automatikusan, mert a Google már feldolgozhatta.
+
 **Edge hibakeresés:** a HUD most megkülönbözteti a sikertelen háttérkapcsolatot, a mikrofonengedély vagy hangkódolás hibáját, az üres hangfelvételt, a Gemini STT hibáját és a Claude szövegbeillesztési hibáját. Felvétel indításakor látható a tényleges böngészős hangformátum, a felvétel végén az időtartam és a méret. A háttérkapcsolati hiba **nem** azonos a hibás Gemini API-kulccsal. Egy korábbi böngészőbővítmény-frissítés után aktív oldalon maradt régi content script újratöltést igényelhet. Az automata Silero VAD és a kézi MediaRecorder más hangrögzítési utat használ.
 
 ## Használat

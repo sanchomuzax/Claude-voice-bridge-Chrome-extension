@@ -210,6 +210,46 @@ async function updateUiSettings(values){
   return {settings:out};
 }
 
+/* Edge/Chromium MV3 may terminate an idle worker while awaiting a long
+ * remote upload/transcription. Keep only active Gemini operations alive with
+ * a harmless extension API call every 20 seconds; never keep it alive idle.
+ * This is separate from the content-script port heartbeat and protects fetch
+ * gaps while retaining automatic shutdown after the task ends.
+ */
+function keepWorkerAlive(task){
+  const timer=setInterval(()=>{
+    try{const pending=chrome.runtime.getPlatformInfo();pending?.catch?.(()=>{});}catch{}
+  },20000);
+  return Promise.resolve(task).finally(()=>clearInterval(timer));
+}
+/* A dedicated long-lived Port avoids pinning a large STT/TTS result on a
+ * single one-shot sendMessage response. Only the claude.ai content script may
+ * request these paid operations. One task per Port, NEVER automatically retry.
+ */
+chrome.runtime.onConnect?.addListener(port=>{
+  if(port.name!=="cvb-audio-task")return;
+  const page=String(port.sender?.url||port.sender?.tab?.url||"");
+  if(port.sender?.id!==chrome.runtime.id||!page.startsWith("https://claude.ai/")){
+    try{port.disconnect();}catch{}return;
+  }
+  let busy=false,disconnected=false;
+  const reply=message=>{if(!disconnected)try{port.postMessage(message);}catch{}};
+  port.onDisconnect.addListener(()=>{disconnected=true;});
+  port.onMessage.addListener(message=>{
+    if(message?.type==="PING"){reply({type:"PONG"});return;}
+    if(message?.type!=="REQUEST"||busy)return;
+    busy=true;
+    const task=message.task;
+    const payload=message.data||{};
+    if(task!=="TRANSCRIBE"&&task!=="SYNTHESIZE"){
+      reply({type:"RESULT",ok:false,error:"Nem engedélyezett hangművelet."});return;
+    }
+    reply({type:"ACCEPTED"});
+    keepWorkerAlive(task==="TRANSCRIBE"?transcribe(payload):synthesize(payload))
+      .then(result=>reply({type:"RESULT",ok:true,...result}))
+      .catch(error=>reply({type:"RESULT",ok:false,error:String(error?.message||error).slice(0,300)}));
+  });
+});
 /* Content scripts cannot read chrome.storage.local: the Gemini key is
  * deliberately restricted to trusted contexts. Push a key-free invalidation
  * signal through extension ports, then let each HUD request sanitized settings.
@@ -248,12 +288,12 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
     if(message.type==="PREVIEW_TTS"&&isExtension){
       const text=String(message.text||"").trim();
       if(text.length>200)throw new Error("A stíluspróba legfeljebb 200 karakteres lehet.");
-      return synthesize({text,ttsModel:message.ttsModel,voice:message.voice,style:message.style},true);
+      return keepWorkerAlive(synthesize({text,ttsModel:message.ttsModel,voice:message.voice,style:message.style},true));
     }
     if(message.type==="UPDATE_UI_SETTINGS"&&page.startsWith("https://claude.ai/"))return updateUiSettings(message.values);
     if(message.type==="OPEN_OPTIONS"){await chrome.runtime.openOptionsPage();return{};}
-    if(message.type==="TRANSCRIBE"&&page.startsWith("https://claude.ai/"))return transcribe(message);
-    if(message.type==="SYNTHESIZE"&&page.startsWith("https://claude.ai/"))return synthesize(message);
+    if(message.type==="TRANSCRIBE"&&page.startsWith("https://claude.ai/"))return keepWorkerAlive(transcribe(message));
+    if(message.type==="SYNTHESIZE"&&page.startsWith("https://claude.ai/"))return keepWorkerAlive(synthesize(message));
     throw new Error("Ismeretlen üzenet.");
   })().then(result=>respond({ok:true,...result})).catch(e=>respond({ok:false,error:String(e?.message||e).slice(0,300)}));
   return true;
