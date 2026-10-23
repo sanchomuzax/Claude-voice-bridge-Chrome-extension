@@ -292,8 +292,8 @@ chrome.runtime.onMessage.addListener((message,sender,respond)=>{
     }
     if(message.type==="UPDATE_UI_SETTINGS"&&page.startsWith("https://claude.ai/"))return updateUiSettings(message.values);
     if(message.type==="OPEN_OPTIONS"){await chrome.runtime.openOptionsPage();return{};}
-    if(message.type==="TRANSCRIBE"&&page.startsWith("https://claude.ai/"))return transcribe(message);
-    if(message.type==="SYNTHESIZE"&&page.startsWith("https://claude.ai/"))return synthesize(message);
+    if(message.type==="TRANSCRIBE"&&page.startsWith("https://claude.ai/"))return keepWorkerAlive(transcribe(message));
+    if(message.type==="SYNTHESIZE"&&page.startsWith("https://claude.ai/"))return keepWorkerAlive(synthesize(message));
     throw new Error("Ismeretlen üzenet.");
   })().then(result=>respond({ok:true,...result})).catch(e=>respond({ok:false,error:String(e?.message||e).slice(0,300)}));
   return true;
