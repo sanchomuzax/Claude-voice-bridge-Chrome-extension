@@ -36,7 +36,7 @@ jobs:
           test -s docs/images/hud-v055-preview.png
           test -s docs/images/popup-v059-preview.png
       - name: Friss kép mentése az ágba
-        if: github.event_name == 'push'
+        if: github.event_name == 'push' && github.ref != 'refs/heads/main'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
