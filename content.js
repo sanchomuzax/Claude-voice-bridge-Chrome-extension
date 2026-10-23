@@ -23,7 +23,8 @@ const message=async(type,data={})=>{
       chrome.runtime.sendMessage({type,...data},response=>{
         const error=chrome.runtime.lastError?.message;
         if(error)return reject(Object.assign(new Error(error),{transport:true}));
-        if(!response?.ok)return reject(new Error(response?.error||"A háttérszolgáltatás nem válaszol."));
+        if(!response)return reject(Object.assign(new Error("Nem érkezett válasz a háttérfolyamattól."),{transport:true}));
+        if(!response.ok)return reject(new Error(response.error||"A háttérszolgáltatás hibát jelzett."));
         resolve(response);
       });
     }catch(error){reject(Object.assign(new Error(String(error?.message||error)),{transport:true}));}
