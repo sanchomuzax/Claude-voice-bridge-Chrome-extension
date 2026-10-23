@@ -70,17 +70,25 @@ function assistantElements(){
   }
   return [];
 }
+// Read only rendered assistant Markdown, never a tool card or the
+// accessibility-only "Need your input" / "Claude responded" labels.
+// Tools can render before the final answer and even request approval.
 function assistantText(){
-  const latest=assistantElements().at(-1);
-  if(!latest)return "";
-  // Read only Claude's rendered answer, not its surrounding controls or
-  // accessibility-only labels such as "Claude responded".
-  const selectors=".standard-markdown,[data-testid='markdown-content']";
-  const candidates=(latest.matches(selectors)?[latest]:[]).concat([...latest.querySelectorAll(selectors)]);
-  const roots=candidates.filter((element,index)=>candidates.findIndex(other=>other===element)===index &&
-    !candidates.some(other=>other!==element&&other.contains(element)));
-  const content=roots.length?roots:[latest];
-  const forbidden="button,script,style,pre,code,svg,.sr-only,[aria-hidden='true'],[data-testid*='thinking'],[data-testid*='tool'],[aria-label*='Copy']";
+  const messages=assistantElements();
+  if(!messages.length)return "";
+  const latest=messages.at(-1);
+  const selectors=".standard-markdown,[data-testid='markdown-content'],.markdown";
+  const nodes=(latest.matches(selectors)?[latest]:[]).concat([...latest.querySelectorAll(selectors)]);
+  const roots=nodes.filter(node=>!nodes.some(parent=>parent!==node&&parent.contains(node)) &&
+    !node.closest("[data-testid*='tool'],[data-testid*='approval'],[data-testid*='permission'],[role='dialog']"));
+  // Some Claude layouts render an answer directly inside .font-claude-response
+  // without a .standard-markdown child. Only this explicit prose element may
+  // be used as fallback; never a generic tool/status container.
+  if(!roots.length&&latest.matches(".font-claude-response,.font-claude-message") &&
+    !latest.closest("[data-testid*='tool'],[data-testid*='permission'],[data-testid*='approval']") &&
+    !CVB.isToolStatus(latest.textContent||""))roots.push(latest);
+  if(!roots.length)return "";
+  const forbidden="button,script,style,pre,code,svg,.sr-only,[hidden],[aria-hidden='true'],[data-testid*='thinking'],[data-testid*='tool'],[data-testid*='permission'],[data-testid*='approval'],[aria-label*='Copy']";
   function rendered(node){
     if(node.nodeType===Node.TEXT_NODE)return node.textContent||"";
     if(node.nodeType!==Node.ELEMENT_NODE)return "";
@@ -89,9 +97,20 @@ function assistantText(){
     const text=[...node.childNodes].map(rendered).join("");
     return /^(P|DIV|SECTION|H1|H2|H3|H4|LI|BLOCKQUOTE|TR)$/.test(tag)?text+"\n":text;
   }
-  return content.map(rendered).join("\n")
-    .replace(/^\s*Claude\s+(?:responded|response)\s*[:\-–]?\s*/i,"")
-    .replace(/[ \t]+\n/g,"\n").replace(/\n{3,}/g,"\n\n").trim();
+  const answer=CVB.cleanForSpeech(roots.map(rendered).join("\n"));
+  return CVB.isToolStatus(answer)?"":answer;
+}
+function pendingToolApproval(){
+  const last=assistantElements().at(-1);
+  if(!last)return false;
+  const tool=last.closest("[data-testid*='tool'],[data-testid*='approval'],[data-testid*='permission']")||
+    last.querySelector("[data-testid*='approval'],[data-testid*='permission'],[data-testid*='tool']");
+  // Only a *current*, visible tool prompt blocks narration. Old tool-card
+  // history or the words quoted in a real answer should not.
+  if(!tool||!visible(tool))return false;
+  const text=(tool.textContent||"").slice(0,700);
+  return /\bNeed your input\b|\b(?:Allow|Approve|Deny)\b/i.test(text) &&
+    !!tool.querySelector("button,[role='button']");
 }
 
 async function init(){
@@ -131,6 +150,7 @@ async function startRecord(){
   if(s.phase==="playing")stopSpeech();
   if(s.recorder?.state==="recording")return;
   if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==="undefined")throw new Error("Ezen a böngészőn nincs MediaRecorder/getUserMedia támogatás.");
+  playCue("listen");
   const stream=await navigator.mediaDevices.getUserMedia({
     audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
   });
@@ -142,15 +162,14 @@ async function startRecord(){
   recorder.onerror=()=>issue(new Error("A hangrögzítés megszakadt."));
   recorder.onstop=()=>{releaseMicrophone();void processRecorded(mime).catch(issue);};
   recorder.start(1000);
-  playCue("listen");
   void lockScreen();
   s.autoTimer=setTimeout(()=>{if(recorder.state==="recording")recorder.stop();},120000);
   setStatus("Felvétel. Beszélj magyarul, majd nyomd meg ismét a gombot.","recording");
 }
 function finishRecord(){
   if(s.recorder?.state!=="recording")return;
-  s.recorder.stop();
   playCue("process");
+  s.recorder.stop();
   setStatus("Leirat készül a Geminivel…","transcribing");
 }
 function blobBase64(blob){
@@ -179,18 +198,36 @@ async function processRecorded(mime){
   if(s.sendMode==="confirm")setStatus("Ellenőrizd a leiratot, majd nyomd meg a Küldés gombot.","idle");
   else await sendTranscript();
 }
+function dismissMobileKeyboard(){
+  const node=editor();
+  if(node&&node.contains(document.activeElement)||document.activeElement===node)document.activeElement?.blur();
+  node?.blur();
+  // Clear the programmatic caret after inserting. No forced blur on a user
+  // refocus: users can still type manually after the automated send.
+  window.getSelection()?.removeAllRanges();
+}
 function putTranscript(text){
   const node=editor();
   if(!node)throw new Error("A beviteli mező nem található. A leirat nincs elküldve.");
-  node.focus();
-  const selection=window.getSelection();
-  const range=document.createRange();
-  range.selectNodeContents(node);range.collapse(false);
-  selection.removeAllRanges();selection.addRange(range);
-  const old=node.textContent?.trim();
-  const inserted=document.execCommand("insertText",false,(old?"\n":"")+text);
-  if(!inserted)throw new Error("A szerkesztő elutasította a szövegbeszúrást.");
-  node.dispatchEvent(new InputEvent("input",{bubbles:true,inputType:"insertText",data:text}));
+  // Programmatic insertion should not summon Android IME. Restore the
+  // original inputmode immediately so manual editing still opens the keyboard.
+  const oldMode=node.getAttribute("inputmode");
+  node.setAttribute("inputmode","none");
+  try{
+    node.focus({preventScroll:true});
+    const selection=window.getSelection();
+    const range=document.createRange();
+    range.selectNodeContents(node);range.collapse(false);
+    selection.removeAllRanges();selection.addRange(range);
+    const old=node.textContent?.trim();
+    const inserted=document.execCommand("insertText",false,(old?"\n":"")+text);
+    if(!inserted)throw new Error("A szerkesztő elutasította a szövegbeszúrást.");
+    node.dispatchEvent(new InputEvent("input",{bubbles:true,inputType:"insertText",data:text}));
+  }finally{
+    dismissMobileKeyboard();
+    if(oldMode===null)node.removeAttribute("inputmode");
+    else node.setAttribute("inputmode",oldMode);
+  }
 }
 async function sendTranscript(){
   if(!s.pending)return;
@@ -199,7 +236,9 @@ async function sendTranscript(){
   const baseline=assistantText();
   const count=assistantElements().length;
   s.pending=false;
+  dismissMobileKeyboard();
   button.click();
+  dismissMobileKeyboard();
   setStatus("Claude válaszára várok…","waiting");
   await monitorAnswer(baseline,count);
 }
@@ -223,13 +262,21 @@ async function monitorAnswer(baseline,count){
       const elements=assistantElements();
       const text=assistantText();
       const fresh=(elements.length>count||text!==baseline)&&text.length>0;
+      if(pendingToolApproval()){
+        setStatus("Claude jóváhagyást kér egy eszközművelethez. Ellenőrizd a Claude felületét.","waiting");
+        changedAt=now;
+        return;
+      }
+      // A tool card may have arrived before the assistant writes its final
+      // message. Never speak a tool label or resolve an empty interim result.
       if(!fresh)return;
       if(last!==text){last=text;changedAt=now;return;}
       const stop=bySelector("stop");
-      // Streaming flag avoids reading a partially rendered Claude response.
       const latest=elements.at(-1);
       if(stop||latest?.closest("[data-is-streaming='true']")||latest?.querySelector("[data-is-streaming='true']"))return;
-      if(now-changedAt>=1300){
+      // Tool responses can pause briefly before Claude continues. A longer
+      // quiet window than the old 1.3 seconds avoids early "Need your input".
+      if(now-changedAt>=2600){
         cleanup();s.lastAnswer=text;resolve(speak(text));
       }
     }
@@ -489,32 +536,77 @@ async function toggleRecord(){
   catch(error){releaseMicrophone();issue(error);}
 }
 
-/* Local, low-volume state cues; never sent to Gemini and never play over TTS. */
-let cueContext=null;
+/* Two distinct, gentle, short state cues: listening and processing.
+ * Quetta can suspend WebAudio even though media playback works. Prefer the
+ * browser's native Audio (already verified for Gemini TTS), retry via
+ * AudioContext on autoplay rejection. Both sounds are generated locally.
+ */
+const cueUrls=new Map();
+let cuePlayer=null, cueContext=null, cueCounter=0;
+function wavCue(type){
+  if(cueUrls.has(type))return cueUrls.get(type);
+  const sampleRate=22050, duration=0.22, count=Math.round(sampleRate*duration);
+  const bytes=new Uint8Array(44+count*2),dv=new DataView(bytes.buffer);
+  function name(i,str){for(let j=0;j<str.length;j++)bytes[i+j]=str.charCodeAt(j);}
+  name(0,"RIFF");dv.setUint32(4,bytes.length-8,true);name(8,"WAVE");
+  name(12,"fmt ");dv.setUint32(16,16,true);dv.setUint16(20,1,true);
+  dv.setUint16(22,1,true);dv.setUint32(24,sampleRate,true);
+  dv.setUint32(28,sampleRate*2,true);dv.setUint16(32,2,true);
+  dv.setUint16(34,16,true);name(36,"data");dv.setUint32(40,count*2,true);
+  for(let i=0;i<count;i++){
+    const t=i/sampleRate,shape=Math.sin(Math.PI*i/count)**2;
+    const f=type==="listen"?690+110*(i/count):570-120*(i/count);
+    const amplitude=0.10*shape*Math.sin(2*Math.PI*f*t);
+    dv.setInt16(44+i*2,Math.round(amplitude*32767),true);
+  }
+  const url=URL.createObjectURL(new Blob([bytes],{type:"audio/wav"}));
+  cueUrls.set(type,url);
+  return url;
+}
 function primeAudio(){
   try{
-    cueContext ||= new (window.AudioContext||window.webkitAudioContext)();
-    if(cueContext.state==="suspended")void cueContext.resume();
+    const Constructor=window.AudioContext||window.webkitAudioContext;
+    if(Constructor){
+      cueContext ||= new Constructor();
+      if(cueContext.state==="suspended")void cueContext.resume().catch(()=>{});
+    }
+    cuePlayer ||= new Audio();
+    cuePlayer.volume=0.35; // Wave peak 0.10 => ~3.5% output.
   }catch{}
 }
-function playCue(which){
+function webAudioCue(type){
+  if(!cueContext||cueContext.state!=="running")return;
+  const start=cueContext.currentTime+0.01,osc=cueContext.createOscillator(),
+    gain=cueContext.createGain(),up=type==="listen";
+  osc.type="sine";
+  osc.frequency.setValueAtTime(up?690:570,start);
+  osc.frequency.linearRampToValueAtTime(up?800:450,start+0.22);
+  gain.gain.setValueAtTime(0.0001,start);
+  gain.gain.linearRampToValueAtTime(0.033,start+0.03);
+  gain.gain.exponentialRampToValueAtTime(0.0001,start+0.22);
+  osc.connect(gain).connect(cueContext.destination);
+  osc.start(start);osc.stop(start+0.23);
+  osc.onended=()=>{osc.disconnect();gain.disconnect();};
+}
+function playCue(type){
   if(!s.cuesEnabled||s.phase==="playing")return;
-  try{
-    primeAudio();
-    if(!cueContext||cueContext.state!=="running")return;
-    const start=cueContext.currentTime+0.008;
-    const osc=cueContext.createOscillator(),gain=cueContext.createGain();
-    const listening=which==="listen";
-    osc.type="sine";
-    osc.frequency.setValueAtTime(listening?660:520,start);
-    osc.frequency.exponentialRampToValueAtTime(listening?810:440,start+0.095);
-    gain.gain.setValueAtTime(0.0001,start);
-    gain.gain.linearRampToValueAtTime(0.014,start+0.018);
-    gain.gain.exponentialRampToValueAtTime(0.0001,start+0.13);
-    osc.connect(gain).connect(cueContext.destination);
-    osc.start(start);osc.stop(start+0.14);
-    osc.onended=()=>{osc.disconnect();gain.disconnect();};
-  }catch{}
+  const token=++cueCounter;
+  primeAudio();
+  if(cuePlayer){
+    try{
+      cuePlayer.pause();cuePlayer.src=wavCue(type);cuePlayer.currentTime=0;
+      const result=cuePlayer.play();
+      result?.catch(async()=>{
+        if(token!==cueCounter)return;
+        try{
+          await cueContext?.resume();
+          if(token===cueCounter)webAudioCue(type);
+        }catch{}
+      });
+      return;
+    }catch{}
+  }
+  if(cueContext?.state==="running")webAudioCue(type);
 }
 function applyCollapsed(value){
   wrapper.dataset.collapsed=String(value);
@@ -554,6 +646,13 @@ for(const id of ["noise","silence"]){
   $(id).addEventListener("change",()=>{void updateVadControls().catch(issue);});
 }
 
+$("cueTest").addEventListener("click",()=>{
+  // Trusted user gesture unlocks Android media playback for subsequent VAD
+  // state transitions. This also makes the two sounds independently testable.
+  primeAudio();
+  playCue("listen");
+  setTimeout(()=>playCue("process"),550);
+});
 $("record").addEventListener("click",()=>{void toggleRecord();});
 $("hands").addEventListener("click",()=>{void toggleHandsFree();});
 $("send").addEventListener("click",()=>{void sendWithHalfDuplex().catch(issue);});
@@ -564,6 +663,11 @@ chrome.runtime.onMessage.addListener((request,sender,reply)=>{
   if(request?.type==="TOGGLE_RECORD"){void toggleRecord();reply({ok:true});}
   if(request?.type==="STOP_SPEECH"){stopSpeech();reply({ok:true});}
 });
-window.addEventListener("pagehide",()=>{void disableHandsFree();releaseMicrophone();clearAudio();});
+window.addEventListener("pagehide",()=>{
+  void disableHandsFree();releaseMicrophone();clearAudio();
+  cuePlayer?.pause();
+  for(const url of cueUrls.values())URL.revokeObjectURL(url);
+  cueUrls.clear();
+});
 void init();
 })();
