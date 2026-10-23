@@ -7,7 +7,7 @@ const source=readFileSync("panel-ui.js","utf8");
 const match=source.match(/globalThis\.CVBPanel = ("[\s\S]*");\s*$/);
 if(!match)throw new Error("Could not extract HUD");
 const panel=JSON.parse(match[1]);
-const target="docs/images/hud-v053-preview.png";
+const target="docs/images/hud-v055-preview.png";
 mkdirSync("docs/images",{recursive:true});
 mkdirSync("dist",{recursive:true});
 const page='<!doctype html><html lang="hu"><head><meta charset="utf-8">'+
@@ -27,7 +27,7 @@ const page='<!doctype html><html lang="hu"><head><meta charset="utf-8">'+
 'root.getElementById("record").disabled=false;root.getElementById("hands").disabled=false;'+
 'root.getElementById("barge").disabled=true;root.getElementById("send").disabled=true;'+
 'root.getElementById("stop").disabled=true;root.getElementById("repeat").disabled=true;'+
-'root.getElementById("helpPanel").hidden=true;</script></body></html>';
+'root.getElementById("helpPanel").hidden=false;root.getElementById("help").setAttribute("aria-expanded","true");</script></body></html>';
 writeFileSync("dist/hud-preview.html",page);
 const candidates=[process.env.CHROME_BIN,"google-chrome","google-chrome-stable","chromium","chromium-browser"].filter(Boolean);
 let chrome=null;
