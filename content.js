@@ -197,13 +197,27 @@ function blobBase64(blob){
     reader.readAsDataURL(blob);
   });
 }
+async function transcribeWithChime(payload){
+  // Processing feedback for BOTH manual recording and hands-free VAD.
+  // Starts only after microphone capture/encoding, stops on success or error.
+  // A Symbol cannot collide with numeric TTS playback tokens.
+  const owner=Symbol("stt-progress");
+  const controller=new AbortController();
+  startWaitChime(owner,controller.signal);
+  try{
+    return await message("TRANSCRIBE",payload);
+  }finally{
+    controller.abort();
+    stopWaitChime(owner);
+  }
+}
 async function processRecorded(mime){
   const seconds=(Date.now()-s.started)/1000;
   if(seconds<0.5){setStatus("A felvétel túl rövid. Próbáld újra.","idle");return;}
   const blob=new Blob(s.chunks,{type:mime});
   s.chunks=[];
   const data=await blobBase64(blob);
-  const {transcript}=await message("TRANSCRIBE",{duration:Math.min(seconds,120),mime,data});
+  const {transcript}=await transcribeWithChime({duration:Math.min(seconds,120),mime,data});
   $("transcript").textContent="Felismert: "+transcript;
   const command=CVB.speechCommand(transcript);
   if(command){
@@ -631,7 +645,7 @@ async function handleHandsSpeech(audio,generation){
     if(seconds>122)throw new Error("A hang meghaladta a 120 másodperces keretet.");
     setStatus("Gemini STT: a beszéd átirata készül…","transcribing");
     const data=globalThis.CVBWav.pcm16WavBase64(audio);
-    const {transcript}=await message("TRANSCRIBE",{duration:Math.min(seconds,120),mime:"audio/wav",data});
+    const {transcript}=await transcribeWithChime({duration:Math.min(seconds,120),mime:"audio/wav",data});
     if(!hands.enabled||hands.generation!==generation)return;
     $("transcript").textContent="Felismert: "+transcript;
     const command=CVB.speechCommand(transcript);
@@ -801,7 +815,9 @@ function makeWaitChimeWav(){
   return waitChime.url;
 }
 function playWaitChime(token,signal){
-  if(waitChime.token!==token||signal.aborted||!s.speechActive||!s.cuesEnabled)return;
+  // Shared by Gemini TTS segment generation and Gemini STT transcription.
+  // waitChime.token is the single owner; late callbacks never make noise.
+  if(waitChime.token!==token||signal.aborted||!s.cuesEnabled)return;
   try{
     waitChime.player ||= new Audio();
     const player=waitChime.player;
