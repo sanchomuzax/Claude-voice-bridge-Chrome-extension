@@ -83,6 +83,31 @@ class NativeUpdaterTest(unittest.TestCase):
                         u.install_release(root, "0.5.9")
             self.assertEqual((root / "manifest.json").read_text(), original)
 
+    def test_symlinked_vendor_directory_cannot_escape_install_root(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            root = Path(tmp) / "extension"
+            elsewhere = Path(tmp) / "elsewhere"
+            root.mkdir()
+            elsewhere.mkdir()
+            (root / "manifest.json").write_text(json.dumps({
+                "name": "Claude Voice Bridge", "version": "0.5.8"
+            }))
+            try:
+                (root / "vendor").symlink_to(elsewhere, target_is_directory=True)
+            except (OSError, NotImplementedError):
+                self.skipTest("Symlinks unavailable")
+            data = package()
+            archive = "Claude-Voice-Bridge-v0.5.9.zip"
+            urls = {archive: "zip", archive + ".sha256": "checksum"}
+            digest = hashlib.sha256(data).hexdigest()
+            replies = {"zip": data, "checksum": digest.encode()}
+            with mock.patch.object(u, "fetch_release", return_value=(archive, urls)):
+                with mock.patch.object(u, "request_bytes", side_effect=lambda key, *_: replies[key]):
+                    with self.assertRaisesRegex(ValueError, "Szimbolikus"):
+                        u.install_release(root, "0.5.9")
+            self.assertEqual(list(elsewhere.iterdir()), [])
+            self.assertEqual(u.manifest_version((root / "manifest.json").read_bytes()), "0.5.8")
+
     def test_only_newer_version_is_written(self):
         with tempfile.TemporaryDirectory() as tmp:
             root = Path(tmp) / "extension"
