@@ -1,0 +1,73 @@
+name: Elavult fejlesztési ágak takarítása
+on:
+  push:
+    branches: [main]
+  pull_request:
+    types: [closed]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: read
+
+jobs:
+  cleanup:
+    if: github.event_name != 'pull_request' || github.event.pull_request.merged == true
+    runs-on: ubuntu-latest
+    steps:
+      - name: Csak lezárt PR utáni, ellenőrzött ágak törlése
+        env:
+          GH_TOKEN: ${{ github.token }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          delete_if_unchanged() {
+            local branch="$1" expected="$2" current opened
+            [[ "$branch" != "main" && "$branch" != "master" ]] || return 0
+            current="$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$branch" --jq '.object.sha' 2>/dev/null || true)"
+            if [[ -z "$current" ]]; then
+              echo "Már nincs meg: $branch"
+              return 0
+            fi
+            if [[ "$current" != "$expected" ]]; then
+              echo "::warning::Időközben változott, megtartva: $branch"
+              return 0
+            fi
+            opened="$(gh api --method GET "repos/$GITHUB_REPOSITORY/pulls" -f state=open -f "head=$GITHUB_REPOSITORY_OWNER:$branch" --jq 'length')"
+            if [[ "$opened" != "0" ]]; then
+              echo "::warning::Nyitott PR használja, megtartva: $branch"
+              return 0
+            fi
+            echo "Törlés, SHA ellenőrizve: $branch"
+            gh api --method DELETE "repos/$GITHUB_REPOSITORY/git/refs/heads/$branch" >/dev/null
+          }
+
+          if [[ "$GITHUB_EVENT_NAME" == "pull_request" ]]; then
+            merged="$(jq -r '.pull_request.merged' "$GITHUB_EVENT_PATH")"
+            head_repo="$(jq -r '.pull_request.head.repo.full_name' "$GITHUB_EVENT_PATH")"
+            [[ "$merged" == "true" && "$head_repo" == "$GITHUB_REPOSITORY" ]] || exit 0
+            branch="$(jq -r '.pull_request.head.ref' "$GITHUB_EVENT_PATH")"
+            expected="$(jq -r '.pull_request.head.sha' "$GITHUB_EVENT_PATH")"
+            delete_if_unchanged "$branch" "$expected"
+            exit 0
+          fi
+
+          # Egyszeri backlog, kizárólag az előzetesen ellenőrzött, lezárt
+          # fejlesztések ágneveivel és pontos commitazonosítóival.
+          while IFS='|' read -r branch expected; do
+            [[ -n "$branch" ]] || continue
+            delete_if_unchanged "$branch" "$expected"
+          done <<'STALE_BRANCHES'
+          docs/refresh-hud-screenshot-v054|34a9f098e2c37ae50b3f1b0adfea5652579e62f7
+          feature/claude-drawer-audio-catalog-v03|6d95959180c4f637cf4c279e7faeacc2967be06e
+          feature/opt-in-barge-in-v050|88f8473a1af6b9eb50c5429ea8f2f2e9aaf4cae4
+          feature/silero-handsfree-v02|4a7f146fd48cb561175770089e7faa9696c8e8b5
+          feature/stt-progress-chime-v053|b6f61caf9667ca5b28f0677ebebb015d1bd2740b
+          feature/tts-preview-releases-public-ready-v040|a118d6ee8b90f2ffad89560698a46779946ed387
+          fix/collapsed-tab-position-v031|8b5ebe8848038bdeba1c16696dcd5efccfb774de
+          fix/hud-popup-clarity-v055|e998275d40add063b6e73de0c74bf672e36eefa1
+          fix/interruptible-playback-wait-chime-v052|32897754f2a9834a724e0911778a2d848b7d8a93
+          fix/labeled-compact-hud-v051|2b03b82b8a08e974a369f8693b9e9ea87e39948a
+          fix/mobile-ime-cues-tool-replies-v041|aee07f1f51b71e59a0b2fccff9d898d3e4c63a4f
+          fix/stt-claude-wait-guards-v054|e89e30dcf0715d15c172e5021b2130742220bb69
+          STALE_BRANCHES
