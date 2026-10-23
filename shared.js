@@ -10,6 +10,12 @@ function speechCommand(text) {
     "küldd":"send","töröld":"clear","lassabban":"slower","gyorsabban":"faster"
   }[normalizeCommand(text)] || null;
 }
+function isToolStatus(raw){
+ const text=String(raw||"").trim();
+ if(!text)return true;
+ // UI labels, tool call headings and approval prompts are not Claude speech.
+ return /^(?:Need your input|Claude responded|Claude response|Used (?:Google )?[\w\s-]+:|Using (?:Google )?[\w\s-]+:|Running tool\b|Waiting for approval\b)/i.test(text);
+}
 function cleanForSpeech(raw) {
   let text=String(raw||"");
   // Do not read screen-reader chrome or a duplicated opening sentence.
@@ -49,7 +55,7 @@ function splitForTts(raw,max=500) {
   }
   return result.filter(Boolean);
 }
-const api=Object.freeze({normalizeCommand,speechCommand,cleanForSpeech,splitForTts});
+const api=Object.freeze({normalizeCommand,speechCommand,isToolStatus,cleanForSpeech,splitForTts});
 if(typeof module!=="undefined"&&module.exports)module.exports=api;
 else scope.CVB=api;
 })(typeof globalThis==="object"?globalThis:this);
