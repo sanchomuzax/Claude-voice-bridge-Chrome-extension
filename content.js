@@ -425,7 +425,12 @@ async function armBargeDuringTts(){
   if(!hands.enabled||!barge.enabled||!hands.busy||!hands.vad||s.phase!=="playing")return;
   barge.monitoring=true;resetBargeCandidate();
   try{await hands.vad.start();}
-  catch(error){barge.monitoring=false;issue(new Error("Közbevágás mikrofonhiba: "+String(error.message||error)));}
+  catch(error){
+    // A failed microphone start must never look like barge-in is active.
+    barge.monitoring=false;barge.enabled=false;
+    resetBargeCandidate();
+    issue(new Error("Közbevágás nem indult, fél-duplex mód marad: "+String(error.message||error)));
+  }
 }
 async function disarmBargeDuringTts(){
   if(!barge.monitoring)return;
