@@ -8,7 +8,7 @@ window.__claudeVoiceBridgeLoaded=true;
 const s={phase:"idle",selectors:{},configured:false,sendMode:"auto",stream:null,recorder:null,
  chunks:[],started:0,autoTimer:null,wakeLock:null,pending:false,transcript:"",
  lastAnswer:"",audio:null,audioUrl:null,playToken:0,rate:1,lastSpoken:"",
- activeWait:null,audioEnd:null,fallbackEnd:null,cuesEnabled:true};
+ activeWait:null,audioEnd:null,fallbackEnd:null,cuesEnabled:true,speechActive:false,speechController:null};
 const hands={enabled:false,starting:false,vad:null,busy:false,generation:0,silenceMs:1200,speechAt:0,threshold:0.62};
 // Barge-in consent is runtime-only and never restored automatically.
 const barge={enabled:false,monitoring:false,candidateAt:0,highFrames:0,confirmed:false,confirmedAt:0,queuedAudio:null};
@@ -50,7 +50,8 @@ function setStatus(text,phase=s.phase){
   $("barge").setAttribute("aria-pressed",String(barge.enabled));
   $("modeState").textContent="Automata: "+(hands.enabled?"aktív":"inaktív")+" · Közbevágás: "+(barge.enabled?"aktív":"inaktív");
   $("send").disabled=!s.pending;
-  $("stop").disabled=phase!=="playing";
+  // Stop is active through Gemini generation, between paragraphs AND while audio plays.
+  $("stop").disabled=!s.speechActive;
   $("repeat").disabled=!s.lastAnswer||phase==="recording";
 }
 function issue(error){setStatus("Hiba: "+String(error?.message||error).slice(0,240),"idle");}
@@ -306,7 +307,14 @@ function clearAudio(){
   if(s.audioUrl){URL.revokeObjectURL(s.audioUrl);s.audioUrl=null;}
 }
 function stopSpeech(){
-  s.playToken++;clearAudio();
+  s.playToken++;
+  // An explicit stop cancels the ENTIRE multi-paragraph playback session,
+  // including a request for the following paragraph still waiting on Gemini.
+  s.speechController?.abort();
+  s.speechController=null;
+  s.speechActive=false;
+  stopWaitChime();
+  clearAudio();
   if("speechSynthesis" in window)speechSynthesis.cancel();
   if(s.fallbackEnd){const done=s.fallbackEnd;s.fallbackEnd=null;done();}
   setStatus("Felolvasás leállítva.","idle");
@@ -351,29 +359,62 @@ async function speak(raw){
   const token=s.playToken;
   const parts=CVB.splitForTts(raw,500).slice(0,60);
   if(!parts.length){setStatus("Nem található felolvasható szöveg.","idle");return;}
-  setStatus("Felolvasás…","playing");
-  if(hands.enabled&&hands.busy&&barge.enabled)await armBargeDuringTts();
+  const controller=new AbortController();
+  s.speechController=controller;
+  s.speechActive=true;
+  setStatus("Felolvasás indul…","playing");
   try{
-    for(const part of parts){
-      if(token!==s.playToken)return;
+    for(let i=0;i<parts.length;i++){
+      if(controller.signal.aborted||token!==s.playToken)return;
+      // The TTS provider returns each segment separately. Explain the silence
+      // and play soft progress notes only while waiting, never over speech.
+      setStatus("A következő szövegrész készül ("+(i+1)+"/"+parts.length+")…","playing");
+      let output;
+      startWaitChime(token,controller.signal);
       try{
-        const output=await message("SYNTHESIZE",{text:part});
-        if(token!==s.playToken)return;
+        output=await CVB.untilCancelled(message("SYNTHESIZE",{text:parts[i]}),controller.signal);
+      }catch(error){
+        stopWaitChime();
+        if(controller.signal.aborted||token!==s.playToken)return;
+        // Restore half-duplex during native TTS fallback.
+        if(barge.monitoring)await disarmBargeDuringTts();
+        setStatus("Gemini TTS-hiba. Beépített felolvasás ("+(i+1)+"/"+parts.length+"): "+String(error?.message||error).slice(0,85),"playing");
+        await fallbackSpeak(parts[i],token);
+        continue;
+      }finally{
+        stopWaitChime();
+      }
+      if(!output||controller.signal.aborted||token!==s.playToken)return;
+      setStatus("Felolvasás ("+(i+1)+"/"+parts.length+")…","playing");
+      // Barge-in only needs the microphone while audible speech is playing,
+      // not while an API request or chime is in progress.
+      if(hands.enabled&&hands.busy&&barge.enabled)await armBargeDuringTts();
+      if(controller.signal.aborted||token!==s.playToken)return;
+      try{
         await playBlob(decodeAudio(output.data,output.mime),token);
       }catch(error){
-        if(token!==s.playToken)return;
-        // Native system TTS cannot be reliably ducked in Quetta.
-        // On fallback restore half-duplex before system audio begins.
+        if(controller.signal.aborted||token!==s.playToken)return;
         if(barge.monitoring)await disarmBargeDuringTts();
-        setStatus("Gemini TTS-hiba, beépített felolvasás: "+String(error?.message||error).slice(0,90),"playing");
-        await fallbackSpeak(part,token);
+        setStatus("Hanghiba. Beépített felolvasás ("+(i+1)+"/"+parts.length+")…","playing");
+        await fallbackSpeak(parts[i],token);
+      }finally{
+        if(barge.monitoring)await disarmBargeDuringTts();
       }
     }
-    if(token===s.playToken)setStatus("Válasz felolvasva. Indíthatod a következő beszédet.","idle");
+    if(token===s.playToken&&!controller.signal.aborted)
+      setStatus("Felolvasás befejezve.","idle");
   }finally{
+    stopWaitChime();
     if(barge.monitoring)await disarmBargeDuringTts();
+    if(s.speechController===controller){
+      s.speechController=null;
+      s.speechActive=false;
+      // Preserve the final completion or stopped state.
+      setStatus($("status").textContent,s.phase);
+    }
   }
 }
+
 function clearPendingTranscript(){
   const node=editor();
   const target=s.transcript;
