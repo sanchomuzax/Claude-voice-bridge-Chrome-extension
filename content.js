@@ -41,6 +41,8 @@ function setStatus(text,phase=s.phase){
   })){
     const button=$(id);button.title=label;button.setAttribute("aria-label",label);
   }
+  const recordCaption=$("record").querySelector(".btn-label");
+  if(recordCaption)recordCaption.textContent=phase==="recording"?"Lezárás":"Felvétel";
   $("record").disabled=hands.enabled||hands.starting||["transcribing","sending","waiting"].includes(phase);
   $("hands").disabled=hands.starting;
   $("hands").setAttribute("aria-pressed",String(hands.enabled));
@@ -772,6 +774,13 @@ $("barge").addEventListener("click",()=>{void toggleBarge().catch(issue);});
 $("send").addEventListener("click",()=>{void sendWithHalfDuplex().catch(issue);});
 $("stop").addEventListener("click",stopSpeech);
 $("repeat").addEventListener("click",()=>{void repeatWithHalfDuplex().catch(issue);});
+$("help").addEventListener("click",()=>{
+  const panel=$("helpPanel"),next=panel.hidden;
+  panel.hidden=!next;
+  $("help").setAttribute("aria-expanded",String(next));
+  $("help").setAttribute("aria-label",next?"Súgó bezárása":"Súgó megnyitása");
+  $("help").title=next?"Súgó bezárása":"Súgó megnyitása";
+});
 $("settings").addEventListener("click",()=>{void message("OPEN_OPTIONS").catch(issue);});
 chrome.runtime.onMessage.addListener((request,sender,reply)=>{
   if(request?.type==="TOGGLE_RECORD"){void toggleRecord();reply({ok:true});}

@@ -34,7 +34,7 @@ test("MV3 includes local VAD script and vendor resources",()=>{
  const scripts=manifest.content_scripts[0].js;
  assert.deepEqual(scripts,["shared.js","vad-codec.js","dist/vad-bundle.js","panel-ui.js","content.js"]);
  assert.ok(manifest.web_accessible_resources[0].resources.includes("vendor/*"));
- assert.equal(manifest.version,"0.5.0");
+ assert.equal(manifest.version,"0.5.1");
 });
 test("VAD remains opt-in and speech capture has explicit UI control",()=>{
  const src=fs.readFileSync(path.join(__dirname,"..","content.js"),"utf8");
