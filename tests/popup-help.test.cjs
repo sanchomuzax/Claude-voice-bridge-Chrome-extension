@@ -63,11 +63,11 @@ test("README links fresh cache-busted HUD and popup screenshots from real source
  const readme=read("README.md");
  const workflow=read(".github/workflows/test.yml");
  assert.match(readme,/docs\/images\/hud-v055-preview\.png/);
- assert.match(readme,/docs\/images\/popup-v055-preview\.png/);
+ assert.match(readme,/docs\/images\/popup-v059-preview\.png/);
  assert.doesNotMatch(readme,/hud-v053-preview\.png/);
  assert.match(workflow,/node scripts\/render-hud-preview\.mjs/);
  assert.match(workflow,/node scripts\/render-popup-preview\.mjs/);
- assert.match(workflow,/git add -f docs\/images\/hud-v055-preview\.png docs\/images\/popup-v055-preview\.png/);
+ assert.match(workflow,/git add -f docs\/images\/hud-v055-preview\.png docs\/images\/popup-v059-preview\.png/);
  assert.match(read("scripts/render-popup-preview.mjs"),/readFileSync\("popup\.html"/);
  assert.match(read("scripts/render-hud-preview.mjs"),/readFileSync\("panel-ui\.js"/);
 });

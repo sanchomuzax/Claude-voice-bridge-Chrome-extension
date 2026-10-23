@@ -8,7 +8,7 @@ A Claude Voice Bridge egy böngészőbővítmény a [claude.ai](https://claude.a
 
 *A v0.5.5 HUD valós HTML/CSS-sablonjából készült előnézet. A súgóban ugyanazok az ikonok láthatók, mint a gombokon. A képek kizárólag mintatartalmat használnak.*
 
-![Claude Voice Bridge v0.5.5: széles böngészőbővítmény-gyorspanel](docs/images/popup-v055-preview.png)
+![Claude Voice Bridge v0.5.9: frissítésjelzővel bővített böngészőpanel](docs/images/popup-v059-preview.png)
 
 A böngésző eszköztárából megnyitható gyorspanel külön, 360 pixeles, mobilon is alkalmazkodó felületet kapott. A HUD beépített súgója képekkel azonosítja a vezérlőket.
 
@@ -42,6 +42,28 @@ A mindenkori telepíthető ZIP a **[GitHub Releases](https://github.com/sanchomu
 **Edge / Manifest V3 háttérfolyamat:** a hosszabb Gemini STT- és TTS-műveletek külön `cvb-audio-task` Port-kapcsolaton futnak, 20 másodpercenkénti életjellel. A háttérfolyamat a feldolgozás alatt célzott életben tartást használ, azután felszabadul. Megszakadt kapcsolat esetén a bővítmény látható hibát ad; a korábban elküldött fizetős hangkérést nem indítja újra automatikusan, mert a Google már feldolgozhatta.
 
 **Edge hibakeresés:** a HUD most megkülönbözteti a sikertelen háttérkapcsolatot, a mikrofonengedély vagy hangkódolás hibáját, az üres hangfelvételt, a Gemini STT hibáját és a Claude szövegbeillesztési hibáját. Felvétel indításakor látható a tényleges böngészős hangformátum, a felvétel végén az időtartam és a méret. A háttérkapcsolati hiba **nem** azonos a hibás Gemini API-kulccsal. Egy korábbi böngészőbővítmény-frissítés után aktív oldalon maradt régi content script újratöltést igényelhet. Az automata Silero VAD és a kézi MediaRecorder más hangrögzítési utat használ.
+
+## Automatikus frissítés (v0.5.9+)
+
+A Bridge **óránként ellenőrzi a legutóbbi stabil GitHub Release-t**. Ha van újabb verzió, az eszköztár ikonján `UPD` jelzés jelenhet meg, a felugró panel pedig kiírja a verziókat és a letöltési hivatkozást. A verzióellenőrzés minden olyan böngészőben működik, amely támogatja a szükséges Chromium-bővítmény API-kat. Ha a böngésző nem jelenít meg badge-et, a felugró panel akkor is megmutatja az állapotot.
+
+**Windows / Edge vagy Chrome – opcionális automatikus telepítés:** a bővítmény nem írhatja felül a saját fájljait. Ehhez külön, helyben futó, ellenőrzött Native Messaging segédprogram jár, amely a már beállított kicsomagolt bővítménymappába telepíti a GitHub Release ZIP-jét. Nem `git pull`-t használ: a kiadásban lévő Silero ONNX/WASM állományok is frissülnek. A telepítő a Release mellett publikált SHA-256 ellenőrzőösszeget ellenőrzi, az archívumban tiltja a könyvtárból kilépő útvonalakat és visszaállítja a fájlokat telepítési hiba esetén. Ez a checksum a **GitHub-kiadáshoz tartozó integritásellenőrzés**, nem független kódaláírás.
+
+1. Telepítsd a v0.5.9 vagy újabb ZIP-et **kicsomagolt bővítményként** az `edge://extensions` vagy `chrome://extensions` felületen. A kiválasztott mappát ne mozgasd később; a mappa tartalmazza a `manifest.json` és `native` fájlokat.
+2. A bővítménykezelőben másold ki a Bridge **32 karakteres Extension ID** értékét. Nem szükséges `key` mezőt hozzáadnod a manifesthez, amíg ugyanabban a mappában tartod és ugyanabban a böngészőben töltöd be a bővítményt. A Native Messaging engedélyezett eredete ehhez az aktuális ID-hez lesz kötve.
+3. Az adott **kicsomagolt mappában** futtasd a PowerShellt (az ID helyére a saját bővítményazonosítód kerüljön):
+
+   ```powershell
+   powershell -NoProfile -ExecutionPolicy Bypass -File .\native\install-windows.ps1 -ExtensionId "abcdefghijklmnopabcdefghijklmnop" -Browser Edge
+   ```
+
+   A `-Browser Chrome` illetve `-Browser Both` beállítás is használható, de a két böngészőben eltérő Extension ID esetén a konfigurációt külön kell kezelni. A segéd a Python 3 telepített verzióját igényli (`py` vagy `python`). Az aktuális felhasználó profiljába települ, rendszergazdai jogosultság nem szükséges.
+4. Nyisd meg a bővítmény felugró paneljét. Az **Ellenőrzés** gombbal azonnal lekérdezheted az új verziót, majd a **Frissítés telepítése** gombbal végrehajthatod. A **Windowsos automatikus telepítés** kapcsoló külön engedélyezhető; alapértelmezetten kikapcsolt.
+5. A frissítés után a bővítmény újratöltődik. **A már nyitott claude.ai oldalt kézzel frissítsd**, amikor nem maradt el nem küldött szöveged vagy folyamatban lévő beszélgetésed: az új content script csak így töltődik be.
+
+**Android / Quetta:** a verzióellenőrzés és a kiadás letöltési linkje használható, de a Windowsos Native Messaging segédprogram nem telepíthető. A Quetta ZIP-frissítését továbbra is a böngésző bővítménykezelőjében kell elvégezni. Ne kapcsold be az automatikus telepítést olyan böngészőben, ahol nincs működő native host.
+
+**Biztonsági korlátok:** a segéd csak a konkrét `sanchomuzax/Claude-voice-bridge-Chrome-extension` repó stabil kiadását fogadja el, kizárólag a telepítéskor kijelölt mappába ír, és az extensionből csak egy verziószámot fogad. A program GitHub-kiadáson keresztül érkező futtatható bővítménykódot telepít, ezért csak akkor engedélyezd az automatikus telepítést, ha megbízol a kiadási folyamatban. A natív segédprogram saját kódját a bővítmény nem módosítja; ha a segéd később frissül, a telepítő PowerShell-szkriptet újra kell futtatni.
 
 ## Használat
 

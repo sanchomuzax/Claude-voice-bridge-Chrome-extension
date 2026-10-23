@@ -22,6 +22,8 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run check
+      - name: Windows updater Python security/installer tests
+        run: python3 -m unittest discover -s native -p 'test_*.py' -v
       - run: npm run audit:secrets
       - name: Valós mobil hit-test (chat és menük kattinthatósága)
         run: node scripts/test-mobile-hit-targets.mjs
@@ -32,13 +34,13 @@ jobs:
           node --check scripts/render-popup-preview.mjs
           node scripts/render-popup-preview.mjs
           test -s docs/images/hud-v055-preview.png
-          test -s docs/images/popup-v055-preview.png
+          test -s docs/images/popup-v059-preview.png
       - name: Friss kép mentése az ágba
         if: github.event_name == 'push'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f docs/images/hud-v055-preview.png docs/images/popup-v055-preview.png
+          git add -f docs/images/hud-v055-preview.png docs/images/popup-v059-preview.png
           if ! git diff --cached --quiet; then
             git commit -m "docs: render new labeled HUD image [skip ci]"
             git push origin "HEAD:${GITHUB_REF_NAME}"
@@ -55,6 +57,8 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           ZIP="Claude-Voice-Bridge-v$VERSION.zip"
           unzip -t "$ZIP"
+          sha256sum "$ZIP" > "$ZIP.sha256"
+          test -s "$ZIP.sha256"
           test -s vendor/silero_vad_v5.onnx
           test -s vendor/vad.worklet.bundle.min.js
       - uses: actions/upload-artifact@v4
@@ -73,7 +77,7 @@ jobs:
           TAG="v$VERSION"
           NOTES=".github/release-notes/$TAG.md"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" "$ZIP" --target "$GITHUB_SHA" --title "Claude Voice Bridge $TAG" --notes-file "$NOTES" --latest
+            gh release create "$TAG" "$ZIP" "$ZIP.sha256" --target "$GITHUB_SHA" --title "Claude Voice Bridge $TAG" --notes-file "$NOTES" --latest
           fi
           while IFS="|" read -r OLD SHA DESC; do
             FILE="Claude-Voice-Bridge-$OLD.zip"

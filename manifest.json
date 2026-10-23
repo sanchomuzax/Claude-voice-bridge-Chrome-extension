@@ -1,14 +1,17 @@
 {
   "manifest_version": 3,
   "name": "Claude Voice Bridge",
-  "version": "0.5.8",
+  "version": "0.5.9",
   "description": "Magyar Claude hangos beszélgetés Gemini STT/TTS-sel, Silero VAD-dal és opcionális közbevágással.",
   "permissions": [
     "storage",
-    "activeTab"
+    "activeTab",
+    "alarms",
+    "nativeMessaging"
   ],
   "host_permissions": [
-    "https://generativelanguage.googleapis.com/*"
+    "https://generativelanguage.googleapis.com/*",
+    "https://api.github.com/*"
   ],
   "action": {
     "default_title": "Claude Voice Bridge",
