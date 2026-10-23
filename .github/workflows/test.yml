@@ -23,6 +23,8 @@ jobs:
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run check
       - run: npm run audit:secrets
+      - name: Valós mobil hit-test (chat és menük kattinthatósága)
+        run: node scripts/test-mobile-hit-targets.mjs
       - name: Friss HUD-kép generálása a tényleges panelből
         run: |
           node --check scripts/render-hud-preview.mjs
