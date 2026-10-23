@@ -194,7 +194,7 @@ test("README points to fresh screenshot and screenshot renderer uses no user dat
  const root=path.join(__dirname,"..");
  const readme=fs.readFileSync(path.join(root,"README.md"),"utf8");
  const renderer=fs.readFileSync(path.join(root,"scripts/render-hud-preview.mjs"),"utf8");
- assert.match(readme,/docs\/images\/hud-v051-preview\.png/);
+ assert.match(readme,/docs\/images\/hud-v053-preview\.png/);
  assert.doesNotMatch(readme,/player-Quetta\.webp/);
  assert.match(renderer,/readFileSync\("panel-ui.js"/);
  assert.match(renderer,/shadow|attachShadow/);
