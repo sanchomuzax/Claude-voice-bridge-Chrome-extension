@@ -65,6 +65,23 @@ A Bridge **óránként ellenőrzi a legutóbbi stabil GitHub Release-t**. Ha van
 
 **Biztonsági korlátok:** a segéd csak a konkrét `sanchomuzax/Claude-voice-bridge-Chrome-extension` repó stabil kiadását fogadja el, kizárólag a telepítéskor kijelölt mappába ír, és az extensionből csak egy verziószámot fogad. A program GitHub-kiadáson keresztül érkező futtatható bővítménykódot telepít, ezért csak akkor engedélyezd az automatikus telepítést, ha megbízol a kiadási folyamatban. A natív segédprogram saját kódját a bővítmény nem módosítja; ha a segéd később frissül, a telepítő PowerShell-szkriptet újra kell futtatni.
 
+## Registry nélküli Windows-frissítés (vállalati gépekhez)
+
+Ha a céges házirend tiltja a registry szerkesztését, a Windows Native Messaging telepítőjét **ne futtasd**. A bővítmény ettől függetlenül tovább működik, a frissítést pedig a külön Python-szkript kezeli. Nem igényel rendszergazdai jogot vagy registry-módosítást. Csak a nyilvános, stabil GitHub Release-re frissít; a meglévő `native/updater.py` végzi a ZIP SHA-256 ellenőrzését, biztonságos kibontását és visszaállítását.
+
+Korábbi (0.5.9) ZIP telepítésénél a `native` almappába külön töltsd le a [frissítő szkriptet](https://raw.githubusercontent.com/sanchomuzax/Claude-voice-bridge-Chrome-extension/main/native/update-standalone.py). Az újabb ZIP-ek már tartalmazzák.
+
+A kicsomagolt bővítménymappából PowerShellben:
+
+```powershell
+py -3 .\native\update-standalone.py --check
+py -3 .\native\update-standalone.py --install
+```
+
+A `--check` csak az elérhető verziót vizsgálja; a `--install` telepít, ha valóban újabb stabil kiadás létezik. Két böngésző esetén mindkét külön telepítési mappában futtasd. A fájlok frissülése után az Edge/Chrome bővítménykezelőben nyomj **Újratöltés**-t, majd frissítsd a `claude.ai` lapot. A szkript nem tudja távolról újratölteni a böngészőt.
+
+A vállalati Python-, hálózati és végpontvédelmi szabályzat továbbra is érvényes. Ha Python-futtatás vagy a GitHub letöltése tiltott, a művelet nem fog működni. A frissítő időzítése kizárólag jóváhagyott környezetben javasolt.
+
 ## Használat
 
 1. A bővítmény beállításaiban add meg a [Google AI Studio](https://aistudio.google.com/apikey) felületén kapott saját Gemini API-kulcsodat.
