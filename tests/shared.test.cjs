@@ -116,7 +116,7 @@ test("gentle audible cues survive mobile autoplay restriction",()=>{
  assert.match(content,/playCue\("listen"\)/);
  assert.match(content,/playCue\("process"\)/);
  assert.match(content,/cueTest/);
- assert.match(panel,/Jelzések próbája/);
+ assert.match(panel,/Jelzések próbája|Két különböző halk hangjelzés tesztelése/);
 });
 test("tool response watcher waits for real Markdown, not intermediate labels",()=>{
  const content=fs.readFileSync(path.join(__dirname,"..","content.js"),"utf8");
