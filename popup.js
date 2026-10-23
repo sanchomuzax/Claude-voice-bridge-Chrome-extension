@@ -13,6 +13,15 @@ function call(type,extra={}){
 async function showUpdate(state){
  const info=$("updateInfo"),actions=$("updateActions");
  actions.hidden=!state.available;
+ const android=/Android/i.test(navigator.userAgent);
+ const zip=$("zipDownload"),hint=$("installHint");
+ zip.hidden=!android||!state.available;
+ hint.textContent=android
+   ?"Quetta (Android): töltsd le a kiadás ZIP-jét, majd importáld a Quetta bővítménykezelőjében. A meglévő beállítások megőrzése nem garantált."
+   :"Windows Edge/Chrome: a bővítmény helyi mappájában indítsd az update.bat fájlt, majd töltsd újra a bővítményt.";
+ if(android&&state.available&&/^\\d+\\.\\d+\\.\\d+$/.test(state.latestVersion)){
+   zip.href="https://github.com/sanchomuzax/Claude-voice-bridge-Chrome-extension/releases/download/v"+state.latestVersion+"/Claude-Voice-Bridge-v"+state.latestVersion+".zip";
+ }
  $("releaseLink").href=state.releaseUrl;
  const checked=state.checkedAt?new Date(state.checkedAt).toLocaleString("hu-HU"):"még nem volt ellenőrizve";
  info.textContent=state.available
