@@ -49,7 +49,7 @@ test("v0.3 UI, model lists and audio cues are wired",()=>{
  const options=require("node:fs").readFileSync(root+"/options.js","utf8");
  const manifest=JSON.parse(require("node:fs").readFileSync(root+"/manifest.json","utf8"));
  assert.ok(manifest.content_scripts[0].js.includes("panel-ui.js"));
- assert.equal(manifest.version,"0.5.3");
+ assert.equal(manifest.version,"0.5.4");
  assert.match(content,/wrapper\.dataset\.collapsed/);
  assert.match(content,/playCue\("process"\)/);
  assert.match(content,/playCue\("listen"\)/);
@@ -123,7 +123,7 @@ test("tool response watcher waits for real Markdown, not intermediate labels",()
  assert.match(content,/if\(!roots\.length\)return ""/);
  assert.match(content,/CVB\.isToolStatus/);
  assert.match(content,/pendingToolApproval\(\)/);
- assert.match(content,/now-changedAt>=2600/);
+ assert.match(content,/const stableMs=sawGeneration\?2600:9500/);
 });
 
 
