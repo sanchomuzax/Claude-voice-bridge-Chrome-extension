@@ -57,6 +57,17 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           ZIP="Claude-Voice-Bridge-v$VERSION.zip"
           unzip -t "$ZIP"
+          python3 - "$ZIP" "$VERSION" <<'PY'
+          import sys, tempfile
+          from pathlib import Path
+          sys.path.insert(0, "native")
+          import updater
+          with tempfile.TemporaryDirectory() as tmp:
+              entries = updater.stage_release(Path(sys.argv[1]), Path(tmp), sys.argv[2])
+              assert "update.bat" in entries
+              assert "native/update-standalone.py" in entries
+              print("Updater ZIP compatibility passed:", len(entries), "files")
+          PY
           sha256sum "$ZIP" > "$ZIP.sha256"
           test -s "$ZIP.sha256"
           test -s vendor/silero_vad_v5.onnx

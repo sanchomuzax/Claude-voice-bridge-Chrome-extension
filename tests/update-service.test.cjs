@@ -8,13 +8,13 @@ const start=source.indexOf("const CVB_REPOSITORY=");
 const end=source.indexOf("chrome.runtime.onMessage.addListener((message,sender,respond)=>",start);
 assert.ok(start>0&&end>start);
 const update=source.slice(start,end);
-function harness(remote="0.5.15"){
+function harness(remote="0.5.16"){
  const callbacks={},store={},alarms=[],badges=[],native=[],scheduled=[];
  let fetchCount=0,reloads=0;
  const zip="Claude-Voice-Bridge-v"+remote+".zip";
  const ctx={chrome:{
   runtime:{
-   getManifest:()=>({version:"0.5.14"}),
+   getManifest:()=>({version:"0.5.15"}),
    onInstalled:{addListener:f=>callbacks.installed=f},
    onStartup:{addListener:f=>callbacks.startup=f},
    sendNativeMessage:(host,request,respond)=>{native.push({host,request});respond({ok:true,version:request.version});},
@@ -42,11 +42,11 @@ function harness(remote="0.5.15"){
 }
 test("numeric semver comparison",()=>{
  const h=harness();
- assert.equal(h.ctx.newer("0.5.15","0.5.14"),true);
- assert.equal(h.ctx.newer("0.5.14","0.5.15"),false);
- assert.equal(h.ctx.newer("0.6.0","0.5.149"),true);
- assert.equal(h.ctx.newer("0.5.14","0.5.14"),false);
- assert.equal(h.ctx.newer("wrong","0.5.14"),false);
+ assert.equal(h.ctx.newer("0.5.16","0.5.15"),true);
+ assert.equal(h.ctx.newer("0.5.15","0.5.16"),false);
+ assert.equal(h.ctx.newer("0.6.0","0.5.159"),true);
+ assert.equal(h.ctx.newer("0.5.15","0.5.15"),false);
+ assert.equal(h.ctx.newer("wrong","0.5.15"),false);
 });
 test("hourly alarm checks GitHub and shows UPD badge",async()=>{
  const h=harness();
@@ -55,7 +55,7 @@ test("hourly alarm checks GitHub and shows UPD badge",async()=>{
  await h.ctx.check();
  const state=await h.ctx.get();
  assert.equal(state.available,true);
- assert.equal(state.latestVersion,"0.5.15");
+ assert.equal(state.latestVersion,"0.5.16");
  assert.equal(h.badges.at(-1),"UPD");
  assert.equal(h.native.length,0);
 });
@@ -63,7 +63,7 @@ test("native install sends only version and command, then reloads",async()=>{
  const h=harness();
  await h.ctx.check();
  const result=await h.ctx.install();
- assert.equal(result.version,"0.5.15");
+ assert.equal(result.version,"0.5.16");
  assert.equal(h.native.length,1);
  assert.equal(h.native[0].host,"com.sancho.cvb_updater");
  assert.deepEqual(Object.keys(h.native[0].request).sort(),["cmd","version"]);
