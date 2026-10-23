@@ -64,6 +64,7 @@ function workerHarness(){
  const callbacks=[],sent=[],timers=[];
  let transcribed=0,spoken=0,workerCalls=0;
  const ctx={
+  cvbActiveAudio:0,
   chrome:{
    runtime:{id:"test-extension",onConnect:{addListener:f=>callbacks.push(f)},getPlatformInfo:()=>{workerCalls++;return Promise.resolve({});}},
    storage:{onChanged:{addListener:()=>{}}}
