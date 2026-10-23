@@ -49,7 +49,7 @@ test("v0.3 UI, model lists and audio cues are wired",()=>{
  const options=require("node:fs").readFileSync(root+"/options.js","utf8");
  const manifest=JSON.parse(require("node:fs").readFileSync(root+"/manifest.json","utf8"));
  assert.ok(manifest.content_scripts[0].js.includes("panel-ui.js"));
- assert.equal(manifest.version,"0.5.5");
+ assert.equal(manifest.version,"0.5.6");
  assert.match(content,/wrapper\.dataset\.collapsed/);
  assert.match(content,/playCue\("process"\)/);
  assert.match(content,/playCue\("listen"\)/);
@@ -199,4 +199,16 @@ test("README points to fresh screenshot and screenshot renderer uses no user dat
  assert.match(renderer,/readFileSync\("panel-ui.js"/);
  assert.match(renderer,/shadow|attachShadow/);
  assert.match(renderer,/synthetic|no user conversation/i);
+});
+
+
+test("mobile HUD host does not steal Claude touches outside visible controls",()=>{
+ const content=fs.readFileSync(path.join(__dirname,"..","content.js"),"utf8");
+ const panel=fs.readFileSync(path.join(__dirname,"..","panel-ui.js"),"utf8");
+ assert.match(content,/wrapper\.style\.cssText="[^"]*pointer-events:none"/);
+ assert.match(panel,/:host\{pointer-events:none!important\}/);
+ assert.match(panel,/#drawer\{pointer-events:auto\}/);
+ assert.match(panel,/:host\(\[data-collapsed=\\"true\\"\]\) #drawer\{pointer-events:none\}/);
+ assert.match(panel,/#toggle\{pointer-events:auto\}/);
+ assert.match(fs.readFileSync(path.join(__dirname,"..",".github/workflows/test.yml"),"utf8"),/node scripts\/test-mobile-hit-targets\.mjs/);
 });
