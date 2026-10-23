@@ -13,13 +13,33 @@ const hands={enabled:false,starting:false,vad:null,busy:false,generation:0,silen
 // Barge-in consent is runtime-only and never restored automatically.
 const barge={enabled:false,monitoring:false,candidateAt:0,highFrames:0,confirmed:false,confirmedAt:0,queuedAudio:null};
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
-const message=(type,data={})=>new Promise((resolve,reject)=>{
-  chrome.runtime.sendMessage({type,...data},response=>{
-    if(chrome.runtime.lastError)return reject(new Error(chrome.runtime.lastError.message));
-    if(!response?.ok)return reject(new Error(response?.error||"A háttérszolgáltatás nem válaszol."));
-    resolve(response);
+const message=async(type,data={})=>{
+  // GET requests may be retried across an Edge/Chromium MV3 worker wake-up.
+  // Never replay TRANSCRIBE, SYNTHESIZE or other charged/mutating requests:
+  // the worker may have received them before the reply channel disappeared.
+  const readOnly=type==="GET_SETTINGS"||type==="GET_STATUS";
+  const attempt=()=>new Promise((resolve,reject)=>{
+    try{
+      chrome.runtime.sendMessage({type,...data},response=>{
+        const error=chrome.runtime.lastError?.message;
+        if(error)return reject(Object.assign(new Error(error),{transport:true}));
+        if(!response)return reject(Object.assign(new Error("Nem érkezett válasz a háttérfolyamattól."),{transport:true}));
+        if(!response.ok)return reject(new Error(response.error||"A háttérszolgáltatás hibát jelzett."));
+        resolve(response);
+      });
+    }catch(error){reject(Object.assign(new Error(String(error?.message||error)),{transport:true}));}
   });
-});
+  for(let n=0;;n++){
+    try{return await attempt();}
+    catch(error){
+      const disconnected=Boolean(error.transport)&&
+        /receiving end does not exist|could not establish connection|message port closed|extension context invalidated|nem érkezett válasz/i.test(error.message);
+      if(disconnected&&readOnly&&n<2){await sleep(250*(n+1));continue;}
+      if(disconnected)throw new Error("Az Edge nem éri el a Bridge háttérfolyamatát. Nem STT- vagy mikrofonhiba; ellenőrizd a bővítmény service workerét az edge://extensions oldalon. ("+error.message+")");
+      throw error;
+    }
+  }
+};
 const wrapper=document.createElement("div");
 wrapper.id="claude-voice-bridge";
 wrapper.style.cssText="position:fixed;z-index:2147483646;right:0;top:calc(env(safe-area-inset-top, 0px) + 8px);max-width:calc(100vw - 44px);pointer-events:none";
@@ -224,27 +244,65 @@ function releaseMicrophone(){
   if(s.stream){s.stream.getTracks().forEach(t=>t.stop());s.stream=null;}
   void unlockScreen();
 }
+function describeMicError(error){
+  const name=String(error?.name||"");
+  if(name==="NotAllowedError"||name==="PermissionDeniedError"||name==="SecurityError")
+    return new Error("Az Edge nem engedte a mikrofont a claude.ai oldalnak ("+name+"). Az oldal mikrofonengedélyét vagy a Windows adatvédelmi beállítást ellenőrizd.");
+  if(name==="NotReadableError")
+    return new Error("A mikrofon nem olvasható az Edge-ben ("+name+"). Lehet, hogy másik program használja.");
+  if(name==="NotFoundError"||name==="DevicesNotFoundError")
+    return new Error("Az Edge nem talál használható mikrofont ("+name+").");
+  return new Error("Edge mikrofonhiba: "+name+" – "+String(error?.message||error));
+}
+function createAudioRecorder(stream){
+  const types=["audio/webm;codecs=opus","audio/webm","audio/mp4","audio/ogg;codecs=opus"];
+  const errors=[];
+  for(const mimeType of types){
+    if(MediaRecorder.isTypeSupported&&!MediaRecorder.isTypeSupported(mimeType))continue;
+    try{return new MediaRecorder(stream,{mimeType});}
+    catch(error){errors.push(mimeType+": "+String(error?.message||error));}
+  }
+  // Some Edge versions only accept their default encoder. Use its ACTUAL
+  // MIME type for upload, never assume the requested codec was used.
+  try{return new MediaRecorder(stream);}
+  catch(error){throw new Error("A MediaRecorder nem indítható Edge alatt. "+errors.join("; ")+"; "+String(error?.message||error));}
+}
 async function startRecord(){
+  // Options-page TTS preview uses a different path. Validate the Bridge
+  // content-script ↔ service-worker channel before requesting the microphone.
+  await reloadBridgeSettings();
   if(!s.configured){setStatus("Előbb add meg a Gemini API-kulcsot.","idle");return;}
   if(["transcribing","sending","waiting"].includes(s.phase))return;
   if(s.phase==="playing")stopSpeech();
   if(s.recorder?.state==="recording")return;
-  if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==="undefined")throw new Error("Ezen a böngészőn nincs MediaRecorder/getUserMedia támogatás.");
-  playCue("listen");
-  const stream=await navigator.mediaDevices.getUserMedia({
-    audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
-  });
-  const mime=["audio/webm;codecs=opus","audio/webm","audio/ogg;codecs=opus","audio/mp4"].find(x=>MediaRecorder.isTypeSupported(x));
-  if(!mime){stream.getTracks().forEach(t=>t.stop());throw new Error("Nincs támogatott hangfelvételi formátum.");}
-  const recorder=new MediaRecorder(stream,{mimeType:mime});
+  if(!navigator.mediaDevices?.getUserMedia||typeof MediaRecorder==="undefined")
+    throw new Error("Ezen az Edge-verzión nem érhető el a MediaRecorder/getUserMedia.");
+  let stream;
+  try{
+    stream=await navigator.mediaDevices.getUserMedia({
+      audio:{echoCancellation:true,noiseSuppression:true,autoGainControl:true}
+    });
+  }catch(error){throw describeMicError(error);}
+  let recorder;
+  try{recorder=createAudioRecorder(stream);}
+  catch(error){stream.getTracks().forEach(t=>t.stop());throw error;}
   s.stream=stream;s.recorder=recorder;s.chunks=[];s.started=Date.now();
   recorder.ondataavailable=event=>{if(event.data?.size)s.chunks.push(event.data);};
-  recorder.onerror=()=>issue(new Error("A hangrögzítés megszakadt."));
-  recorder.onstop=()=>{releaseMicrophone();void processRecorded(mime).catch(issue);};
-  recorder.start(1000);
+  recorder.onerror=event=>{
+    issue(new Error("Az Edge hangrögzítője hibát jelzett: "+String(event.error?.message||event.error?.name||"MediaRecorder error")));
+  };
+  recorder.onstop=()=>{
+    // MediaRecorder's final dataavailable fires before onstop.
+    const mime=recorder.mimeType||s.chunks.find(x=>x.type)?.type||"";
+    releaseMicrophone();
+    void processRecorded(mime).catch(issue);
+  };
+  try{recorder.start(1000);}
+  catch(error){releaseMicrophone();s.recorder=null;throw new Error("Az Edge nem tudta elindítani a felvételt: "+String(error?.message||error));}
+  playCue("listen");
   void lockScreen();
   s.autoTimer=setTimeout(()=>{if(recorder.state==="recording")recorder.stop();},120000);
-  setStatus("Felvétel. Beszélj magyarul, majd nyomd meg ismét a gombot.","recording");
+  setStatus("Mikrofon aktív, hangrögzítés folyamatban ("+(recorder.mimeType||"alapértelmezett formátum")+"). Beszélj, majd nyomd meg újra.","recording");
 }
 function finishRecord(){
   if(s.recorder?.state!=="recording")return;
@@ -277,10 +335,15 @@ async function transcribeWithChime(payload){
 async function processRecorded(mime){
   const seconds=(Date.now()-s.started)/1000;
   if(seconds<0.5){setStatus("A felvétel túl rövid. Próbáld újra.","idle");return;}
-  const blob=new Blob(s.chunks,{type:mime});
+  const blob=new Blob(s.chunks,{type:mime||s.chunks.find(x=>x.type)?.type||""});
   s.chunks=[];
+  const resolvedMime=blob.type.split(";")[0].toLowerCase();
+  if(blob.size<128)throw new Error("A mikrofon elindult, de az Edge nem adott használható hangadatot ("+blob.size+" bájt). Nem indult Gemini STT-kérés.");
+  if(!["audio/webm","audio/ogg","audio/mp4"].includes(resolvedMime))
+    throw new Error("Az Edge nem támogatott felvételi formátumot adott: "+(blob.type||"ismeretlen")+". Nem indult Gemini STT-kérés.");
+  setStatus("A felvétel elkészült: "+(blob.size/1024).toFixed(1)+" KiB, "+resolvedMime+", "+seconds.toFixed(1)+" mp. Gemini beszédátírás…","transcribing");
   const data=await blobBase64(blob);
-  const {transcript}=await transcribeWithChime({duration:Math.min(seconds,120),mime,data});
+  const {transcript}=await transcribeWithChime({duration:Math.min(seconds,120),mime:resolvedMime,data});
   $("transcript").textContent="Felismert: "+transcript;
   const command=CVB.speechCommand(transcript);
   if(command){
@@ -619,6 +682,7 @@ async function disableHandsFree(){
   setStatus("Automata mód kikapcsolva. A kézi felvétel továbbra is működik.","idle");
 }
 async function enableHandsFree(){
+  await reloadBridgeSettings();
   if(!s.configured)throw new Error("Előbb add meg a Gemini API-kulcsot.");
   if(["recording","transcribing","waiting","playing"].includes(s.phase)||s.pending)
     throw new Error("Előbb fejezd be a folyamatban lévő kört.");
@@ -631,9 +695,12 @@ async function enableHandsFree(){
     const vad=await globalThis.CVBSilero.MicVAD.new({
       model:"v5",
       processorType:"auto",
-      getStream:()=>navigator.mediaDevices.getUserMedia({audio:{
-        channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true
-      }}),
+      getStream:async()=>{
+        try{return await navigator.mediaDevices.getUserMedia({audio:{
+          channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true
+        }});}
+        catch(error){throw describeMicError(error);}
+      },
       startOnLoad:false,
       baseAssetPath:chrome.runtime.getURL("vendor/"),
       onnxWASMBasePath:chrome.runtime.getURL("vendor/"),
@@ -725,7 +792,7 @@ async function handleHandsSpeech(audio,generation){
     const seconds=audio.length/globalThis.CVBWav.SAMPLE_RATE;
     if(seconds<0.5){setStatus("Túl rövid beszéd. Folytatom a figyelést.","idle");return;}
     if(seconds>122)throw new Error("A hang meghaladta a 120 másodperces keretet.");
-    setStatus("Gemini STT: a beszéd átirata készül…","transcribing");
+    setStatus("Silero beszédvég érzékelve: "+seconds.toFixed(1)+" mp hang. Gemini STT indul…","transcribing");
     const data=globalThis.CVBWav.pcm16WavBase64(audio);
     const {transcript}=await transcribeWithChime({duration:Math.min(seconds,120),mime:"audio/wav",data});
     if(!hands.enabled||hands.generation!==generation)return;

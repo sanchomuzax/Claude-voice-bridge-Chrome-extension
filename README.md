@@ -37,6 +37,10 @@ A mindenkori telepíthető ZIP a **[GitHub Releases](https://github.com/sanchomu
 
 **Asztali Chrome:** csomagold ki a ZIP-et, majd `chrome://extensions` → *Fejlesztői mód* → *Kicsomagolt bővítmény betöltése*. A Chrome androidos kiadása önmagában nem támogatja ezt a telepítési módot.
 
+**Asztali Microsoft Edge:** csomagold ki a ZIP-et, majd `edge://extensions` → *Fejlesztői mód* → *Kicsomagolt betöltése* (*Load unpacked*). A TTS-minta meghallgatása önmagában nem ellenőrzi a mikrofont vagy az STT-t; a Claude-oldali **Felvétel** gomb külön kommunikációs és mikrofonellenőrzést végez.
+
+**Edge hibakeresés:** a HUD most megkülönbözteti a sikertelen háttérkapcsolatot, a mikrofonengedély vagy hangkódolás hibáját, az üres hangfelvételt, a Gemini STT hibáját és a Claude szövegbeillesztési hibáját. Felvétel indításakor látható a tényleges böngészős hangformátum, a felvétel végén az időtartam és a méret. A háttérkapcsolati hiba **nem** azonos a hibás Gemini API-kulccsal. Egy korábbi böngészőbővítmény-frissítés után aktív oldalon maradt régi content script újratöltést igényelhet. Az automata Silero VAD és a kézi MediaRecorder más hangrögzítési utat használ.
+
 ## Használat
 
 1. A bővítmény beállításaiban add meg a [Google AI Studio](https://aistudio.google.com/apikey) felületén kapott saját Gemini API-kulcsodat.
