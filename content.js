@@ -646,6 +646,13 @@ for(const id of ["noise","silence"]){
   $(id).addEventListener("change",()=>{void updateVadControls().catch(issue);});
 }
 
+$("cueTest").addEventListener("click",()=>{
+  // Trusted user gesture unlocks Android media playback for subsequent VAD
+  // state transitions. This also makes the two sounds independently testable.
+  primeAudio();
+  playCue("listen");
+  setTimeout(()=>playCue("process"),550);
+});
 $("record").addEventListener("click",()=>{void toggleRecord();});
 $("hands").addEventListener("click",()=>{void toggleHandsFree();});
 $("send").addEventListener("click",()=>{void sendWithHalfDuplex().catch(issue);});
