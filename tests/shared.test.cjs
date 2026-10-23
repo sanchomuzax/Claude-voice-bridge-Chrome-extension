@@ -49,7 +49,7 @@ test("v0.3 UI, model lists and audio cues are wired",()=>{
  const options=require("node:fs").readFileSync(root+"/options.js","utf8");
  const manifest=JSON.parse(require("node:fs").readFileSync(root+"/manifest.json","utf8"));
  assert.ok(manifest.content_scripts[0].js.includes("panel-ui.js"));
- assert.equal(manifest.version,"0.5.2");
+ assert.equal(manifest.version,"0.5.3");
  assert.match(content,/wrapper\.dataset\.collapsed/);
  assert.match(content,/playCue\("process"\)/);
  assert.match(content,/playCue\("listen"\)/);
@@ -194,7 +194,7 @@ test("README points to fresh screenshot and screenshot renderer uses no user dat
  const root=path.join(__dirname,"..");
  const readme=fs.readFileSync(path.join(root,"README.md"),"utf8");
  const renderer=fs.readFileSync(path.join(root,"scripts/render-hud-preview.mjs"),"utf8");
- assert.match(readme,/docs\/images\/hud-v051-preview\.png/);
+ assert.match(readme,/docs\/images\/hud-v053-preview\.png/);
  assert.doesNotMatch(readme,/player-Quetta\.webp/);
  assert.match(renderer,/readFileSync\("panel-ui.js"/);
  assert.match(renderer,/shadow|attachShadow/);

@@ -210,6 +210,28 @@ async function updateUiSettings(values){
   return {settings:out};
 }
 
+/* Content scripts cannot read chrome.storage.local: the Gemini key is
+ * deliberately restricted to trusted contexts. Push a key-free invalidation
+ * signal through extension ports, then let each HUD request sanitized settings.
+ */
+const settingsPorts=new Set();
+chrome.runtime.onConnect?.addListener(port=>{
+  if(port.name!=="cvb-settings")return;
+  const page=String(port.sender?.url||port.sender?.tab?.url||"");
+  if(!page.startsWith("https://claude.ai/"))return;
+  settingsPorts.add(port);
+  port.onDisconnect.addListener(()=>settingsPorts.delete(port));
+});
+chrome.storage.onChanged?.addListener((changes,area)=>{
+  if(area!=="local")return;
+  // Usage accounting does not invalidate configuration.
+  if(!Object.keys(changes).some(key=>key==="apiKey"||exposed.includes(key)))return;
+  for(const port of settingsPorts){
+    try{port.postMessage({type:"SETTINGS_UPDATED"});}
+    catch{settingsPorts.delete(port);}
+  }
+});
+
 chrome.runtime.onMessage.addListener((message,sender,respond)=>{
   if(!message||typeof message.type!=="string")return;
   const page=String(sender.url||sender.tab?.url||"");

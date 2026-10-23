@@ -27,13 +27,13 @@ jobs:
         run: |
           node --check scripts/render-hud-preview.mjs
           node scripts/render-hud-preview.mjs
-          test -s docs/images/hud-v051-preview.png
+          test -s docs/images/hud-v053-preview.png
       - name: Friss kép mentése az ágba
         if: github.event_name == 'push'
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -f docs/images/hud-v051-preview.png
+          git add -f docs/images/hud-v053-preview.png
           if ! git diff --cached --quiet; then
             git commit -m "docs: render new labeled HUD image [skip ci]"
             git push origin "HEAD:${GITHUB_REF_NAME}"

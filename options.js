@@ -107,7 +107,7 @@ document.getElementById("settings").addEventListener("submit",async event=>{
  data.vadThreshold=Math.min(0.9,Math.max(0.4,Number(data.vadThreshold)||0.62));
  data.apiKey=data.apiKey.trim();
  await chrome.storage.local.set(data);
- el("status").textContent="Beállítások mentve. A nyitott Claude-lapot frissítsd az új modellek használatához.";
+ el("status").textContent="Beállítások mentve. A nyitott Claude Voice Bridge panel automatikusan átveszi a változásokat.";
 });
 el("checkMicrophone").addEventListener("click",async()=>{
  try{
