@@ -27,7 +27,8 @@ test("Android Quetta update shows actual version-specific ZIP URL",async()=>{
  assert.equal(h.elements.get("zipDownload").href,
   "https://github.com/sanchomuzax/Claude-voice-bridge-Chrome-extension/releases/download/v0.5.18/Claude-Voice-Bridge-v0.5.18.zip");
  assert.equal(h.elements.get("updateActions").hidden,false);
- assert.match(h.elements.get("installHint").textContent,/Quetta.*importáld/);
+ assert.match(h.elements.get("installHint").textContent,/Quetta.*új bővítménypéldányt.*NEM frissíti/);
+ assert.match(html,/ZIP letöltése \(új telepítés\)/);
 });
 test("No update, invalid versions and desktop never show ZIP action",async()=>{
  for(const [ua,changed] of [

@@ -108,3 +108,9 @@ Node.js 20+, `npm install`, `npm run check`, `npm run build`, `npm run pack`. A 
 Felhasznált technológiák: [Silero VAD](https://github.com/snakers4/silero-vad), [@ricky0123/vad-web](https://github.com/ricky0123/vad), [ONNX Runtime Web](https://onnxruntime.ai/) és [Google Gemini API](https://ai.google.dev/gemini-api/docs).
 
 Licenc: [MIT](LICENSE). A külső összetevők saját licenceit a [harmadik féltől származó összetevők](THIRD_PARTY_NOTICES.md) dokumentum tartalmazza.
+
+## Quetta Android és ZIP importálás
+
+**A Quetta ZIP importálása nem tekinthető a már telepített bővítmény frissítésének:** a kipróbált Quetta Android környezetben új példányt hozott létre. Az új példány nem örökli automatikusan a régi `chrome.storage.local` beállításait, a két példány párhuzamosan zavarhatja egymást. A ZIP-hivatkozás ezért kizárólag új telepítéshez szolgál; nem javasolt használni egy meglévő példány frissítésére.
+
+Valódi, azonos bővítményazonosítót megtartó frissítéshez böngésző által támogatott terjesztési és frissítési csatorna szükséges (például hivatalos áruházból telepített, azonos azonosítójú bővítmény). A Quetta konkrét áruházfrissítési viselkedése külön készülékes tesztet igényel. Eddig nem ellenőrzött; ne ígérjünk automatikus frissítést. 
