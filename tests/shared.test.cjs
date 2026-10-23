@@ -169,3 +169,34 @@ test("barge-in ducks TTS before confirmation and preserves the recorded interrup
  assert.match(content,/consumeBargeAudio\(generation\)/);
  assert.match(content,/barge.enabled=false;\s*resetBargeCandidate\(\)/);
 });
+
+
+test("v0.5.1 HUD has persistent labels and contextual help",()=>{
+ const fs=require("node:fs"),path=require("node:path");
+ const root=path.join(__dirname,"..");
+ const template=fs.readFileSync(path.join(root,"panel-ui.js"),"utf8");
+ const match=template.match(/globalThis.CVBPanel = ("[\s\S]*");\s*$/);
+ assert.ok(match,"panel data found");
+ const html=JSON.parse(match[1]);
+ for(const label of ["Felvétel","Automata","Közbevág","Küldés","Leállítás","Ismétlés","Beállítás","Súgó","Hangpróba"]){
+   assert.ok(html.includes('>'+label+'</span>'),label);
+ }
+ assert.match(html,/id="helpPanel" hidden/);
+ assert.match(html,/Elég két alapmódot ismerned/);
+ assert.match(html,/#cueTest,#controls #cueTest\{width:auto!important/);
+ const c=fs.readFileSync(path.join(root,"content.js"),"utf8");
+ assert.match(c,/helpPanel/);
+ assert.match(c,/aria-expanded/);
+ assert.match(c,/recordCaption\.textContent=phase==="recording"/);
+});
+test("README points to fresh screenshot and screenshot renderer uses no user data",()=>{
+ const fs=require("node:fs"),path=require("node:path");
+ const root=path.join(__dirname,"..");
+ const readme=fs.readFileSync(path.join(root,"README.md"),"utf8");
+ const renderer=fs.readFileSync(path.join(root,"scripts/render-hud-preview.mjs"),"utf8");
+ assert.match(readme,/docs\/images\/hud-v051-preview\.png/);
+ assert.doesNotMatch(readme,/player-Quetta\.webp/);
+ assert.match(renderer,/readFileSync\("panel-ui.js"/);
+ assert.match(renderer,/shadow|attachShadow/);
+ assert.match(renderer,/synthetic|no user conversation/i);
+});
