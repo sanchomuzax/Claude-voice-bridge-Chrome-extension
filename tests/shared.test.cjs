@@ -82,3 +82,46 @@ test("TTS preview has stop gesture, pressed state and local playback",()=>{
  assert.match(opts,/previewEpoch\+\+/);
  assert.match(opts,/határozott tempó/);
 });
+
+
+test("tool cards and approval prompts are not narrated as Claude answers",()=>{
+ const {isToolStatus}=require("../shared.js");
+ for(const text of [
+  "Need your input",
+  "Need your input\nAllow Google Calendar",
+  "Used Google Calendar: Creates a calendar",
+  "Running tool",
+  "Claude responded"
+ ])assert.equal(isToolStatus(text),true,text);
+ for(const text of [
+  "Beírtam a naptáradba ma reggel fél nyolcra.",
+  "Rendben, hozzáadtam az eseményt.",
+  "A következő naptáreseményed holnap van."
+ ])assert.equal(isToolStatus(text),false,text);
+});
+test("mobile injection releases keyboard and sends only after insertion",()=>{
+ const content=fs.readFileSync(path.join(__dirname,"..","content.js"),"utf8");
+ assert.match(content,/function dismissMobileKeyboard\(\)/);
+ assert.match(content,/node\.setAttribute\("inputmode","none"\)/);
+ assert.match(content,/node\.removeAttribute\("inputmode"\)/);
+ assert.match(content,/dismissMobileKeyboard\(\);\s*button\.click\(\);\s*dismissMobileKeyboard\(\)/);
+ assert.match(content,/node\.focus\(\{preventScroll:true\}\)/);
+});
+test("gentle audible cues survive mobile autoplay restriction",()=>{
+ const content=fs.readFileSync(path.join(__dirname,"..","content.js"),"utf8");
+ const panel=fs.readFileSync(path.join(__dirname,"..","panel-ui.js"),"utf8");
+ assert.match(content,/function wavCue\(type\)/);
+ assert.match(content,/cuePlayer\.play\(\)/);
+ assert.match(content,/webAudioCue\(type\)/);
+ assert.match(content,/playCue\("listen"\)/);
+ assert.match(content,/playCue\("process"\)/);
+ assert.match(content,/cueTest/);
+ assert.match(panel,/Jelzések próbája/);
+});
+test("tool response watcher waits for real Markdown, not intermediate labels",()=>{
+ const content=fs.readFileSync(path.join(__dirname,"..","content.js"),"utf8");
+ assert.match(content,/if\(!roots\.length\)return ""/);
+ assert.match(content,/CVB\.isToolStatus/);
+ assert.match(content,/pendingToolApproval\(\)/);
+ assert.match(content,/now-changedAt>=2600/);
+});
