@@ -275,10 +275,6 @@ async function cvbCheckUpdate(){
       await chrome.storage.local.set({cvbAvailableUpdate:update,cvbCheckedAt:Date.now(),cvbUpdateError:""});
       const status=await cvbSavedStatus();
       await cvbRefreshBadge(status);
-      if(status.available&&status.autoInstall&&cvbActiveAudio===0)
-        void cvbInstallUpdate().catch(async error=>{
-          await chrome.storage.local.set({cvbUpdateError:String(error?.message||error).slice(0,250)});
-        });
       return status;
     }catch(error){
       await chrome.storage.local.set({cvbUpdateError:String(error?.message||error).slice(0,250),cvbCheckedAt:Date.now()});
