@@ -38,7 +38,7 @@ def allowed_file(name):
     """Only files from the known, installable browser-extension package."""
     if name in STATIC_FILES:
         return True
-    if bool(re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]*\.(?:js|css|html|json)", name)):
+    if name in {"config.json", "updater.json"}:\n        return False\n    if bool(re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]*\.(?:js|css|html|json)", name)):
         return True
     if bool(re.fullmatch(r"dist/[A-Za-z][A-Za-z0-9_.-]*\.js", name)):
         return True
