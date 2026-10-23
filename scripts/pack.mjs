@@ -1,10 +1,11 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 
-const output = "Claude-Voice-Bridge-v0.5.8.zip";
+const output = "Claude-Voice-Bridge-v0.5.9.zip";
 const files = [
   "manifest.json","background.js","content.js","shared.js","vad-codec.js","panel-ui.js",
   "selectors.json","options.html","options.js","popup.html","popup.js","popup.css","ui.css",
+  "native/updater.py","native/install-windows.ps1",
   "dist/vad-bundle.js","vendor/silero_vad_v5.onnx","vendor/vad.worklet.bundle.min.js"
 ];
 import { readdirSync } from "node:fs";
