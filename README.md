@@ -18,6 +18,7 @@ A böngésző eszköztárából megnyitható gyorspanel külön, 360 pixeles, mo
 - A Claude válaszának felolvasása Gemini 3.8 TTS modellekkel.
 - Kézi mikrofonvezérlés vagy bekapcsolható, helyi **Silero VAD** beszédvég-érzékelés.
 - Becsukható, a jobb felső sarokban megjelenő Claude-stílusú panel **magyarul feliratozott, kompakt HUD-ikonokkal és lenyitható súgóval**, világos és sötét megjelenéssel.
+- **Mobilos érintés-áteresztés:** a HUD láthatatlan külső rétege nem foghatja el a Claude-chat és menük érintéseit. Becsukott állapotban csak a kinyitófül érinthető; nyitva csak a látható panel.
 - **Opcionális közbevágás (barge-in):** csak az automata mód melletti külön kapcsolóval aktiválható. Indításkor mindig inaktív. Közbevágásnál először lehalkítja, megerősített beszédre leállítja a felolvasást.
 - Két diszkrét hangjelzés a hallgatás és a feldolgozás kezdetéhez.
 - **„Leállítás”** gomb: az egész több bekezdéses felolvasást megszakítja, akkor is, ha éppen a Gemini következő hangrészére vár. A közbevágás funkciótól független.
