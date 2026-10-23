@@ -41,6 +41,8 @@ function setStatus(text,phase=s.phase){
   })){
     const button=$(id);button.title=label;button.setAttribute("aria-label",label);
   }
+  const recordCaption=$("record").querySelector(".btn-label");
+  if(recordCaption)recordCaption.textContent=phase==="recording"?"Lezárás":"Felvétel";
   $("record").disabled=hands.enabled||hands.starting||["transcribing","sending","waiting"].includes(phase);
   $("hands").disabled=hands.starting;
   $("hands").setAttribute("aria-pressed",String(hands.enabled));
