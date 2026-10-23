@@ -7,7 +7,7 @@ const source=readFileSync("panel-ui.js","utf8");
 const match=source.match(/globalThis\.CVBPanel = ("[\s\S]*");\s*$/);
 if(!match)throw new Error("Could not extract HUD");
 const panel=JSON.parse(match[1]);
-const target="docs/images/hud-v051-preview.png";
+const target="docs/images/hud-v053-preview.png";
 mkdirSync("docs/images",{recursive:true});
 mkdirSync("dist",{recursive:true});
 const page='<!doctype html><html lang="hu"><head><meta charset="utf-8">'+
