@@ -338,14 +338,21 @@ async function sendTranscript(){
 }
 async function monitorAnswer(baseline,count){
   if(s.activeWait){s.activeWait.disconnect();s.activeWait=null;}
-  const started=Date.now();
-  let last="";let changedAt=Date.now();let reported=false;
+  const started=Date.now(),owner=Symbol("claude-answer-wait");
+  const waitController=new AbortController();
+  const chimeOptions={delayMs:1100,repeatMs:4200};
+  let last="",changedAt=started,reported=false,approvalPaused=false,sawGeneration=false;
+  // Claude can spend much longer reasoning or calling tools than Gemini spends
+  // synthesizing a segment. Keep the gentle progress sound while waiting.
+  startWaitChime(owner,waitController.signal,chimeOptions);
   return new Promise((resolve,reject)=>{
     const obs=new MutationObserver(update);
     s.activeWait=obs;
     const ticker=setInterval(update,500);
     function cleanup(){
       obs.disconnect();clearInterval(ticker);
+      waitController.abort();
+      stopWaitChime(owner);
       if(s.activeWait===obs)s.activeWait=null;
     }
     function update(){
@@ -353,31 +360,42 @@ async function monitorAnswer(baseline,count){
       const now=Date.now();
       if(now-started>600000){cleanup();reject(new Error("Claude 10 perc alatt sem fejezte be a választ."));return;}
       if(now-started>180000&&!reported){reported=true;setStatus("Claude még dolgozik. Tovább várok…","waiting");}
-      const elements=assistantElements();
+      if(pendingToolApproval()){
+        if(!approvalPaused){approvalPaused=true;stopWaitChime(owner);}
+        setStatus("Claude jóváhagyást kér egy eszközművelethez. Ellenőrizd a Claude felületét.","waiting");
+        changedAt=now;return;
+      }
+      if(approvalPaused){
+        approvalPaused=false;
+        startWaitChime(owner,waitController.signal,chimeOptions);
+        setStatus("Claude válaszára várok…","waiting");
+      }
+      const elements=assistantElements(),latest=elements.at(-1);
       const text=assistantText();
       const fresh=(elements.length>count||text!==baseline)&&text.length>0;
-      if(pendingToolApproval()){
-        setStatus("Claude jóváhagyást kér egy eszközművelethez. Ellenőrizd a Claude felületét.","waiting");
-        changedAt=now;
-        return;
-      }
-      // A tool card may have arrived before the assistant writes its final
-      // message. Never speak a tool label or resolve an empty interim result.
+      const stop=bySelector("stop");
+      const streamingNode=latest?.closest("[data-is-streaming]")||
+        latest?.querySelector("[data-is-streaming]");
+      const streaming=streamingNode?.getAttribute("data-is-streaming")==="true";
+      // We can only trust a short silence if the UI has demonstrably shown
+      // generation in progress AND it has now stopped. Otherwise the mobile
+      // Claude DOM may have no matching Stop button at all.
+      if(stop||streaming)sawGeneration=true;
       if(!fresh)return;
       if(last!==text){last=text;changedAt=now;return;}
-      const stop=bySelector("stop");
-      const latest=elements.at(-1);
-      if(stop||latest?.closest("[data-is-streaming='true']")||latest?.querySelector("[data-is-streaming='true']"))return;
-      // Tool responses can pause briefly before Claude continues. A longer
-      // quiet window than the old 1.3 seconds avoids early "Need your input".
-      if(now-changedAt>=2600){
-        cleanup();s.lastAnswer=text;resolve(speak(text));
+      if(stop||streaming)return;
+      const stableMs=sawGeneration?2600:9500;
+      if(now-changedAt>=stableMs){
+        cleanup();
+        s.lastAnswer=text;
+        resolve(speak(text));
       }
     }
     obs.observe(document.body,{subtree:true,childList:true,characterData:true});
     update();
   });
 }
+
 function clearAudio(){
   if(s.audioEnd){const done=s.audioEnd;s.audioEnd=null;done();}
   if(s.audio){s.audio.pause();s.audio.src="";s.audio=null;}
