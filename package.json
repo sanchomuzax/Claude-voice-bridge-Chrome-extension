@@ -1,6 +1,6 @@
 {
   "name": "claude-voice-bridge",
-  "version": "0.4.1",
+  "version": "0.5.0",
   "private": true,
   "description": "Chrome MV3 Gemini STT/TTS for claude.ai with Silero hands-free VAD",
   "scripts": {
