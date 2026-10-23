@@ -130,20 +130,83 @@ function pendingToolApproval(){
     !!tool.querySelector("button,[role='button']");
 }
 
+let settingsRefreshSerial=0;
+let vadRestartPending=false;
+let vadRestarting=false;
+async function restartVadIfNeeded(){
+  if(!vadRestartPending||vadRestarting||!hands.enabled||hands.busy||hands.starting||barge.confirmed)return false;
+  vadRestartPending=false;vadRestarting=true;
+  const bargeAllowed=barge.enabled;
+  try{
+    // Silero options are specified when MicVAD is created. Recreate the
+    // instance only between utterances, never during an active recording.
+    await disableHandsFree();
+    await enableHandsFree();
+    barge.enabled=bargeAllowed;
+    setStatus("Beszédérzékelés új beállításokkal aktív.","listening");
+    return true;
+  }catch(error){
+    issue(new Error("Az új beszédérzékelési beállítások alkalmazása nem sikerült: "+String(error.message||error)));
+    return false;
+  }finally{vadRestarting=false;}
+}
+function applyBridgeConfig(cfg){
+  const settings=cfg.settings||{};
+  const previousConfigured=s.configured;
+  const priorThreshold=hands.threshold,priorSilence=hands.silenceMs;
+  s.configured=cfg.configured;
+  s.sendMode=settings.sendMode||"auto";
+  hands.silenceMs=Math.max(700,Math.min(2500,Number(settings.silenceMs)||1200));
+  hands.threshold=Math.max(0.4,Math.min(0.9,Number(settings.vadThreshold)||0.62));
+  s.cuesEnabled=settings.soundCues!==false;
+  $("noise").value=String(hands.threshold);
+  $("silence").value=String(hands.silenceMs);
+  showSliderValues();
+  applyCollapsed(Boolean(settings.panelCollapsed));
+  if(!s.cuesEnabled)stopWaitChime();
+  if(hands.enabled&&(priorThreshold!==hands.threshold||priorSilence!==hands.silenceMs)){
+    vadRestartPending=true;
+    // If speech is currently being recorded or processed, resumeHands()
+    // will apply the new parameters after the current turn finishes.
+    if(!hands.busy&&!barge.confirmed)void restartVadIfNeeded();
+  }
+  if(!previousConfigured&&s.configured&&s.phase==="idle")
+    setStatus("Gemini kapcsolat beállítva. Indíthatod a beszédet.","idle");
+  else setStatus($("status").textContent,s.phase);
+}
+async function reloadBridgeSettings(){
+  const serial=++settingsRefreshSerial;
+  const cfg=await message("GET_SETTINGS");
+  if(serial!==settingsRefreshSerial)return;
+  applyBridgeConfig(cfg);
+}
+function startSettingsSync(){
+  let stopped=false,port=null;
+  function connect(){
+    if(stopped||!chrome.runtime?.id||!wrapper.isConnected)return;
+    try{
+      port=chrome.runtime.connect({name:"cvb-settings"});
+      port.onMessage.addListener(data=>{
+        if(data?.type==="SETTINGS_UPDATED")void reloadBridgeSettings().catch(issue);
+      });
+      port.onDisconnect.addListener(()=>{
+        if(!stopped&&chrome.runtime?.id)setTimeout(connect,1500);
+      });
+    }catch{
+      if(!stopped)setTimeout(connect,1500);
+    }
+  }
+  connect();
+  return ()=>{
+    stopped=true;
+    try{port?.disconnect();}catch{}
+  };
+}
 async function init(){
   try{
-    const cfg=await message("GET_SETTINGS");
-    s.configured=cfg.configured;
-    s.sendMode=cfg.settings.sendMode;
-    hands.silenceMs=Math.max(700,Math.min(2500,Number(cfg.settings.silenceMs)||1200));
-    hands.threshold=Math.max(0.4,Math.min(0.9,Number(cfg.settings.vadThreshold)||0.62));
-    s.cuesEnabled=cfg.settings.soundCues!==false;
-    $("noise").value=String(hands.threshold);
-    $("silence").value=String(hands.silenceMs);
-    showSliderValues();
-    applyCollapsed(Boolean(cfg.settings.panelCollapsed));
+    await reloadBridgeSettings();
     s.selectors=await fetch(chrome.runtime.getURL("selectors.json")).then(r=>r.json());
-    if(!s.configured)setStatus("A Gemini API-kulcs nincs beállítva. Nyisd meg a ⚙ menüt.","idle");
+    if(!s.configured)setStatus("A Gemini API-kulcs nincs beállítva. Nyisd meg a Beállítások menüt.","idle");
     else if(!editor())setStatus("A Claude szerkesztő nem található. Nyiss meg egy beszélgetést.","idle");
     else setStatus("Készen áll. Indíthatod a beszédet.","idle");
   }catch(error){issue(error);}
@@ -513,6 +576,7 @@ async function pauseHands(){
   if(hands.vad)await hands.vad.pause();
 }
 async function resumeHands(generation=hands.generation){
+  if(vadRestartPending&&await restartVadIfNeeded())return;
   if(!hands.enabled||hands.generation!==generation||hands.busy||barge.confirmed||barge.queuedAudio||s.pending&&s.sendMode!=="confirm")return;
   if(!hands.vad)return;
   await hands.vad.start();
@@ -946,7 +1010,9 @@ chrome.runtime.onMessage.addListener((request,sender,reply)=>{
   if(request?.type==="TOGGLE_RECORD"){void toggleRecord();reply({ok:true});}
   if(request?.type==="STOP_SPEECH"){stopSpeech();reply({ok:true});}
 });
+const disconnectSettingsSync=startSettingsSync();
 window.addEventListener("pagehide",()=>{
+  disconnectSettingsSync();
   stopSpeech();
   if(waitChime.url)URL.revokeObjectURL(waitChime.url);
   void disableHandsFree();releaseMicrophone();clearAudio();
