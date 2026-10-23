@@ -27,7 +27,7 @@ const page='<!doctype html><html lang="hu"><head><meta charset="utf-8">'+
 'root.getElementById("record").disabled=false;root.getElementById("hands").disabled=false;'+
 'root.getElementById("barge").disabled=true;root.getElementById("send").disabled=true;'+
 'root.getElementById("stop").disabled=true;root.getElementById("repeat").disabled=true;'+
-'root.getElementById("helpPanel").hidden=true;</script></body></html>';
+'root.getElementById("helpPanel").hidden=false;root.getElementById("help").setAttribute("aria-expanded","true");</script></body></html>';
 writeFileSync("dist/hud-preview.html",page);
 const candidates=[process.env.CHROME_BIN,"google-chrome","google-chrome-stable","chromium","chromium-browser"].filter(Boolean);
 let chrome=null;
