@@ -54,7 +54,7 @@ test("both manual and hands-free capture call the same STT chime helper",()=>{
  assert.equal(matches.length,2);
  assert.match(source,/async function processRecorded\(mime\)[\s\S]*?await transcribeWithChime\(\{duration:Math\.min\(seconds,120\),mime,data\}\)/);
  assert.match(source,/async function handleHandsSpeech\(audio,generation\)[\s\S]*?await transcribeWithChime\(\{duration:Math\.min\(seconds,120\),mime:"audio\/wav",data\}\)/);
- assert.doesNotMatch(source,/await message\("TRANSCRIBE"/);
+ assert.equal((source.match(/await message\("TRANSCRIBE"/g)||[]).length,1,"Only the shared chime wrapper may call TRANSCRIBE directly");
 });
 
 test("progress notes can play in STT without TTS speechActive flag",()=>{
