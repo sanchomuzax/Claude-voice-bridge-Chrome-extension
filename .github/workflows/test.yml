@@ -22,6 +22,8 @@ jobs:
           node-version: '22'
       - run: npm ci --ignore-scripts --no-audit --no-fund
       - run: npm run check
+      - name: Windows updater Python security/installer tests
+        run: python3 -m unittest discover -s native -p 'test_*.py' -v
       - run: npm run audit:secrets
       - name: Valós mobil hit-test (chat és menük kattinthatósága)
         run: node scripts/test-mobile-hit-targets.mjs
