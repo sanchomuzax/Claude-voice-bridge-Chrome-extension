@@ -42,7 +42,7 @@ function makeSpeechRuntime(remote){
  assert.ok(stop.includes("s.speechController?.abort()"));
  assert.ok(speak.includes("CVB.untilCancelled"));
  vm.createContext(ctx);
- vm.runInContext(stop+"\n"+speak+"\nglobalThis.beginSpeech=speak;globalThis.endSpeech=stop;",ctx);
+ vm.runInContext(stop+"\n"+speak+"\nglobalThis.beginSpeech=speak;globalThis.endSpeech=stopSpeech;",ctx);
  return {...ctx,status,get plays(){return plays;},get calls(){return calls;}};
 }
 
