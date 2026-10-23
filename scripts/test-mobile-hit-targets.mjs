@@ -30,6 +30,7 @@ const fixture='<!doctype html><html><head><meta name="viewport" content="width=d
 'const results={};results.expandedMenu=topElementAt("claude-menu");'+
 'results.expandedChat=topElementAt("claude-chat");'+
 'wrapper.dataset.collapsed="true";'+
+'for(const animation of root.getElementById("drawer").getAnimations())animation.finish();'+
 'results.collapsedMenu=topElementAt("claude-menu");'+
 'results.collapsedChat=topElementAt("claude-chat");'+
 'results.collapsedReply=topElementAt("claude-reply");'+
