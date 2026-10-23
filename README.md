@@ -16,6 +16,8 @@ A Claude Voice Bridge egy böngészőbővítmény a [claude.ai](https://claude.a
 - Becsukható, a jobb felső sarokban megjelenő Claude-stílusú panel **magyarul feliratozott, kompakt HUD-ikonokkal és lenyitható súgóval**, világos és sötét megjelenéssel.
 - **Opcionális közbevágás (barge-in):** csak az automata mód melletti külön kapcsolóval aktiválható. Indításkor mindig inaktív. Közbevágásnál először lehalkítja, megerősített beszédre leállítja a felolvasást.
 - Két diszkrét hangjelzés a hallgatás és a feldolgozás kezdetéhez.
+- **„Leállítás”** gomb: az egész több bekezdéses felolvasást megszakítja, akkor is, ha éppen a Gemini következő hangrészére vár. A közbevágás funkciótól független.
+- A következő szövegrész TTS-generálása alatt halk, négyhangos **„tidintidim”** jelzés ismétlődik körülbelül 3,2 másodpercenként. Amikor a beszéd elkezdődik vagy leállítod, a jelzés megszűnik. A meglévő hangjelzések-kapcsolóval együtt kikapcsolható.
 - Zajküszöb és beszédvégi csend állítása csúszkával.
 - A hivatalos Google API-ból lekért modellek és hangok, tájékoztató díjakkal.
 - **TTS-próba** a beállításokban: a megadott beszédstílust olvassa fel az éppen kiválasztott hanggal; második koppintásra leáll.
