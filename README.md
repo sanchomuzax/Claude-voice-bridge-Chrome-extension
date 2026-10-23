@@ -8,7 +8,7 @@ A Claude Voice Bridge egy böngészőbővítmény a [claude.ai](https://claude.a
 
 *A v0.5.5 HUD valós HTML/CSS-sablonjából készült előnézet. A súgóban ugyanazok az ikonok láthatók, mint a gombokon. A képek kizárólag mintatartalmat használnak.*
 
-![Claude Voice Bridge v0.5.5: széles böngészőbővítmény-gyorspanel](docs/images/popup-v055-preview.png)
+![Claude Voice Bridge v0.5.9: frissítésjelzővel bővített böngészőpanel](docs/images/popup-v059-preview.png)
 
 A böngésző eszköztárából megnyitható gyorspanel külön, 360 pixeles, mobilon is alkalmazkodó felületet kapott. A HUD beépített súgója képekkel azonosítja a vezérlőket.
 
