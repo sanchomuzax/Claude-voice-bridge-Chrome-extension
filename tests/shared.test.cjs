@@ -125,3 +125,47 @@ test("tool response watcher waits for real Markdown, not intermediate labels",()
  assert.match(content,/pendingToolApproval\(\)/);
  assert.match(content,/now-changedAt>=2600/);
 });
+
+
+test("barge-in requires both persistent user speech and three high confidence frames",()=>{
+ const {bargeSpeechConfirmed}=require("../shared.js");
+ assert.equal(bargeSpeechConfirmed(299,3),false);
+ assert.equal(bargeSpeechConfirmed(300,2),false);
+ assert.equal(bargeSpeechConfirmed(300,3),true);
+ assert.equal(bargeSpeechConfirmed(600,4),true);
+});
+test("HUD uses compact SVG icons and unambiguous switch status, not ki/be labels",()=>{
+ const src=fs.readFileSync(path.join(__dirname,"..","panel-ui.js"),"utf8");
+ const content=fs.readFileSync(path.join(__dirname,"..","content.js"),"utf8");
+ const doc=src.match(/globalThis.CVBPanel = (".*");/s);
+ assert.ok(doc);
+ const html=JSON.parse(doc[1]);
+ for(const id of ["record","hands","barge","send","stop","repeat","settings"]){
+   const re=new RegExp('id="'+id+'"[^>]*><svg');
+   assert.match(html,re);
+ }
+ assert.match(html,/id="hands"[^>]*aria-pressed="false"/);
+ assert.match(html,/id="barge"[^>]*aria-pressed="false"[^>]*disabled/);
+ assert.match(html,/id="modeState"/);
+ assert.match(html,/grid-template-columns:repeat\(4,minmax\(0,1fr\)\)/);
+ assert.match(content,/Automata: "\+\(hands.enabled\?"aktív":"inaktív"\)/);
+ assert.match(content,/Közbevágás: "\+\(barge.enabled\?"aktív":"inaktív"\)/);
+});
+test("barge-in is strictly disabled by default and also resets when automatic mode stops",()=>{
+ const content=fs.readFileSync(path.join(__dirname,"..","content.js"),"utf8");
+ assert.match(content,/const barge=\{enabled:false,monitoring:false/);
+ assert.match(content,/async function toggleBarge\(\)/);
+ assert.match(content,/if\(!hands.enabled\)return;/);
+ assert.match(content,/async function disableHandsFree\(\)\{\s*barge.enabled=false/);
+ assert.match(content,/if\(hands.enabled&&hands.busy&&barge.enabled\)await armBargeDuringTts/);
+ assert.match(content,/if\(barge.monitoring\)await disarmBargeDuringTts/);
+});
+test("barge-in ducks TTS before confirmation and preserves the recorded interruption",()=>{
+ const content=fs.readFileSync(path.join(__dirname,"..","content.js"),"utf8");
+ assert.match(content,/echoCancellation:true,noiseSuppression:true,autoGainControl:true/);
+ assert.match(content,/s.audio.volume=0.12/);
+ assert.match(content,/CVB.bargeSpeechConfirmed/);
+ assert.match(content,/barge.queuedAudio=audio/);
+ assert.match(content,/consumeBargeAudio\(generation\)/);
+ assert.match(content,/barge.enabled=false;\s*resetBargeCandidate\(\)/);
+});
