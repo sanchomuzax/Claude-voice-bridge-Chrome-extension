@@ -21,6 +21,20 @@ function bargeSpeechConfirmed(elapsedMs,highFrames){
   // VAD frames. The Silero model alone cannot distinguish TTS echo from user.
   return Number(elapsedMs)>=300&&Number(highFrames)>=3;
 }
+function untilCancelled(promise,signal){
+  // Resolve immediately on stop even while Gemini's API response is in flight.
+  // The eventual late response is observed but discarded, not played.
+  if(signal.aborted)return Promise.resolve(null);
+  return new Promise((resolve,reject)=>{
+    const done=()=>signal.removeEventListener("abort",cancel);
+    function cancel(){done();resolve(null);}
+    signal.addEventListener("abort",cancel,{once:true});
+    Promise.resolve(promise).then(
+      value=>{done();resolve(signal.aborted?null:value);},
+      error=>{done();if(signal.aborted)resolve(null);else reject(error);}
+    );
+  });
+}
 function cleanForSpeech(raw) {
   let text=String(raw||"");
   // Do not read screen-reader chrome or a duplicated opening sentence.
@@ -60,7 +74,7 @@ function splitForTts(raw,max=500) {
   }
   return result.filter(Boolean);
 }
-const api=Object.freeze({normalizeCommand,speechCommand,isToolStatus,bargeSpeechConfirmed,cleanForSpeech,splitForTts});
+const api=Object.freeze({normalizeCommand,speechCommand,isToolStatus,bargeSpeechConfirmed,untilCancelled,cleanForSpeech,splitForTts});
 if(typeof module!=="undefined"&&module.exports)module.exports=api;
 else scope.CVB=api;
 })(typeof globalThis==="object"?globalThis:this);
