@@ -1,0 +1,19 @@
+*{box-sizing:border-box}
+:root{color-scheme:light dark}
+html,body{margin:0;min-width:340px;width:360px;max-width:100%;font:14px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif}
+body{background:#faf9f6;color:#292623}
+main{padding:20px;width:100%;min-width:0}
+.popup-header{display:flex;align-items:center;gap:12px}
+.logo{flex:0 0 40px;width:40px;height:40px;border-radius:11px;display:grid;place-items:center;background:#d97757;color:white;font-size:22px}
+h1{margin:0;font-size:18px;font-weight:720;line-height:1.2;letter-spacing:-.35px}
+.subtitle{font-size:11px;color:#726961;margin:4px 0 0}
+.tip{margin:19px 0 15px;color:#423c37}
+.usage{border:1px solid #e2dad1;background:#fffcf7;border-radius:11px;padding:12px 13px;margin:0 0 15px}
+.usage h2{font-size:12px;font-weight:700;color:#775f51;margin:0 0 5px}
+.usage p{margin:0;font-variant-numeric:tabular-nums;line-height:1.5;overflow-wrap:break-word}
+.settings-button{display:flex;gap:10px;align-items:center;justify-content:center;width:100%;min-height:44px;background:#d97757;color:white;border:0;border-radius:10px;font:650 13px system-ui;cursor:pointer}
+.settings-button svg{width:18px;height:18px}
+.settings-button:hover{background:#c76b4d}
+.settings-button:focus-visible{outline:3px solid #f2b19a;outline-offset:2px}
+@media(prefers-color-scheme:dark){body{background:#26231f;color:#f1ede6}.subtitle{color:#bbb0a3}.tip{color:#e0d6cb}.usage{background:#32302b;border-color:#554c42}.usage h2{color:#ebad90}}
+@media(max-width:359px){html,body{min-width:290px;width:100%}main{padding:16px}}
