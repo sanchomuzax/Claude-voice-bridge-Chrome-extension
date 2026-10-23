@@ -10,6 +10,8 @@ const s={phase:"idle",selectors:{},configured:false,sendMode:"auto",stream:null,
  lastAnswer:"",audio:null,audioUrl:null,playToken:0,rate:1,lastSpoken:"",
  activeWait:null,audioEnd:null,fallbackEnd:null,cuesEnabled:true};
 const hands={enabled:false,starting:false,vad:null,busy:false,generation:0,silenceMs:1200,speechAt:0,threshold:0.62};
+// Barge-in consent is runtime-only and never restored automatically.
+const barge={enabled:false,monitoring:false,candidateAt:0,highFrames:0,confirmed:false,confirmedAt:0,queuedAudio:null};
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const message=(type,data={})=>new Promise((resolve,reject)=>{
   chrome.runtime.sendMessage({type,...data},response=>{
@@ -27,12 +29,24 @@ shadow.innerHTML=globalThis.CVBPanel;
 (document.body||document.documentElement).appendChild(wrapper);
 const $=id=>shadow.getElementById(id);
 function setStatus(text,phase=s.phase){
-  s.phase=phase; $("status").textContent=text;
-  $("record").textContent=phase==="recording"?"Felvétel lezárása":"Beszéd indítása";
+  s.phase=phase;$("status").textContent=text;
+  const recordLabel=phase==="recording"?"Felvétel lezárása":"Beszéd indítása";
+  for(const [id,label] of Object.entries({
+    record:recordLabel,
+    hands:hands.enabled?"Automata mód aktív. Koppints a kikapcsoláshoz.":"Automata mód inaktív. Koppints a bekapcsoláshoz.",
+    barge:barge.enabled?"Közbevágás aktív. Koppints a kikapcsoláshoz.":
+      hands.enabled?"Közbevágás inaktív. Koppints a bekapcsoláshoz.":"Közbevágás nem aktív. Előbb az automata módot kapcsold be.",
+    send:"Leirat elküldése",stop:"Felolvasás leállítása",
+    repeat:"Válasz újraolvasása",settings:"Beállítások"
+  })){
+    const button=$(id);button.title=label;button.setAttribute("aria-label",label);
+  }
   $("record").disabled=hands.enabled||hands.starting||["transcribing","sending","waiting"].includes(phase);
-  $("hands").textContent=hands.enabled?"Automata: be":"Automata: ki";
   $("hands").disabled=hands.starting;
   $("hands").setAttribute("aria-pressed",String(hands.enabled));
+  $("barge").disabled=!hands.enabled||hands.starting;
+  $("barge").setAttribute("aria-pressed",String(barge.enabled));
+  $("modeState").textContent="Automata: "+(hands.enabled?"aktív":"inaktív")+" · Közbevágás: "+(barge.enabled?"aktív":"inaktív");
   $("send").disabled=!s.pending;
   $("stop").disabled=phase!=="playing";
   $("repeat").disabled=!s.lastAnswer||phase==="recording";
@@ -336,19 +350,27 @@ async function speak(raw){
   const parts=CVB.splitForTts(raw,500).slice(0,60);
   if(!parts.length){setStatus("Nem található felolvasható szöveg.","idle");return;}
   setStatus("Felolvasás…","playing");
-  for(const part of parts){
-    if(token!==s.playToken)return;
-    try{
-      const output=await message("SYNTHESIZE",{text:part});
+  if(hands.enabled&&hands.busy&&barge.enabled)await armBargeDuringTts();
+  try{
+    for(const part of parts){
       if(token!==s.playToken)return;
-      await playBlob(decodeAudio(output.data,output.mime),token);
-    }catch(error){
-      if(token!==s.playToken)return;
-      setStatus("Gemini TTS-hiba, beépített felolvasás: "+String(error?.message||error).slice(0,90),"playing");
-      await fallbackSpeak(part,token);
+      try{
+        const output=await message("SYNTHESIZE",{text:part});
+        if(token!==s.playToken)return;
+        await playBlob(decodeAudio(output.data,output.mime),token);
+      }catch(error){
+        if(token!==s.playToken)return;
+        // Native system TTS cannot be reliably ducked in Quetta.
+        // On fallback restore half-duplex before system audio begins.
+        if(barge.monitoring)await disarmBargeDuringTts();
+        setStatus("Gemini TTS-hiba, beépített felolvasás: "+String(error?.message||error).slice(0,90),"playing");
+        await fallbackSpeak(part,token);
+      }
     }
+    if(token===s.playToken)setStatus("Válasz felolvasva. Indíthatod a következő beszédet.","idle");
+  }finally{
+    if(barge.monitoring)await disarmBargeDuringTts();
   }
-  if(token===s.playToken)setStatus("Válasz felolvasva. Indíthatod a következő beszédet.","idle");
 }
 function clearPendingTranscript(){
   const node=editor();
@@ -395,11 +417,46 @@ async function handleCommand(command){
  * The valid PCM segment is transcribed only after the end-of-speech callback.
  * The VAD stream is paused throughout STT, Claude response and TTS (half-duplex).
  */
+function resetBargeCandidate(){
+  barge.candidateAt=0;barge.highFrames=0;
+  if(s.audio)s.audio.volume=1;
+}
+async function armBargeDuringTts(){
+  if(!hands.enabled||!barge.enabled||!hands.busy||!hands.vad||s.phase!=="playing")return;
+  barge.monitoring=true;resetBargeCandidate();
+  try{await hands.vad.start();}
+  catch(error){
+    // A failed microphone start must never look like barge-in is active.
+    barge.monitoring=false;barge.enabled=false;
+    resetBargeCandidate();
+    issue(new Error("Közbevágás nem indult, fél-duplex mód marad: "+String(error.message||error)));
+  }
+}
+async function disarmBargeDuringTts(){
+  if(!barge.monitoring)return;
+  barge.monitoring=false;resetBargeCandidate();
+  if(hands.vad&&hands.busy)await hands.vad.pause();
+}
+function consumeBargeAudio(generation){
+  if(!hands.enabled||generation!==hands.generation){barge.queuedAudio=null;return;}
+  if(hands.busy||!barge.queuedAudio)return;
+  const audio=barge.queuedAudio;barge.queuedAudio=null;
+  void handleHandsSpeech(audio,generation);
+}
+async function toggleBarge(){
+  if(!hands.enabled)return;
+  barge.enabled=!barge.enabled;
+  if(!barge.enabled){
+    if(barge.monitoring)await disarmBargeDuringTts();
+    barge.confirmed=false;barge.queuedAudio=null;resetBargeCandidate();
+  }else if(s.phase==="playing"&&hands.busy)await armBargeDuringTts();
+  setStatus(barge.enabled?"Közbevágás aktív a felolvasás alatt.":"Közbevágás kikapcsolva. Half-duplex mód.",s.phase);
+}
 async function pauseHands(){
   if(hands.vad)await hands.vad.pause();
 }
 async function resumeHands(generation=hands.generation){
-  if(!hands.enabled||hands.generation!==generation||hands.busy||s.pending&&s.sendMode!=="confirm")return;
+  if(!hands.enabled||hands.generation!==generation||hands.busy||barge.confirmed||barge.queuedAudio||s.pending&&s.sendMode!=="confirm")return;
   if(!hands.vad)return;
   await hands.vad.start();
   if(hands.enabled&&hands.generation===generation&&!hands.busy){
@@ -409,6 +466,8 @@ async function resumeHands(generation=hands.generation){
   }
 }
 async function disableHandsFree(){
+  barge.enabled=false;barge.monitoring=false;barge.confirmed=false;
+  barge.queuedAudio=null;resetBargeCandidate();
   hands.enabled=false;
   hands.generation++;
   hands.speechAt=0;
@@ -433,6 +492,9 @@ async function enableHandsFree(){
     const vad=await globalThis.CVBSilero.MicVAD.new({
       model:"v5",
       processorType:"auto",
+      getStream:()=>navigator.mediaDevices.getUserMedia({audio:{
+        channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true
+      }}),
       startOnLoad:false,
       baseAssetPath:chrome.runtime.getURL("vendor/"),
       onnxWASMBasePath:chrome.runtime.getURL("vendor/"),
@@ -442,20 +504,56 @@ async function enableHandsFree(){
       minSpeechFrames:16,
       preSpeechPadFrames:10,
       onSpeechStart:()=>{
-        if(!hands.enabled||hands.generation!==generation||hands.busy)return;
+        if(!hands.enabled||hands.generation!==generation)return;
+        if(barge.monitoring&&barge.enabled&&hands.busy&&s.phase==="playing"){
+          barge.candidateAt=Date.now();barge.highFrames=0;
+          // Temporarily duck the Gemini audio. If actual user speech is still
+          // detected after 300 ms, the interruption is confirmed.
+          if(s.audio)s.audio.volume=0.12;
+          return;
+        }
+        if(hands.busy)return;
         hands.speechAt=Date.now();
         setStatus("Beszédet érzékeltem. A csend után automatikusan küldöm.","listening");
       },
       onVADMisfire:()=>{
+        if(barge.confirmed){
+          barge.confirmed=false;resetBargeCandidate();
+          if(!hands.busy)void resumeHands(generation).catch(issue);
+          return;
+        }
+        if(barge.monitoring){resetBargeCandidate();return;}
         if(hands.enabled&&!hands.busy)setStatus("Túl rövid beszéd, tovább hallgatok.","listening");
       },
-      onFrameProcessed:()=>{
-        if(hands.enabled&&!hands.busy&&hands.speechAt&&Date.now()-hands.speechAt>120000){
+      onFrameProcessed:probabilities=>{
+        if(!hands.enabled||hands.generation!==generation)return;
+        if(barge.monitoring&&barge.candidateAt&&!barge.confirmed){
+          const strong=Number(probabilities?.isSpeech||0)>=Math.max(0.65,hands.threshold);
+          barge.highFrames=strong?barge.highFrames+1:0;
+          if(CVB.bargeSpeechConfirmed(Date.now()-barge.candidateAt,barge.highFrames)){
+            barge.confirmed=true;barge.confirmedAt=Date.now();barge.monitoring=false;
+            stopSpeech();
+            setStatus("Közbevágás érzékelve. Hallgatlak…","interrupting");
+          }
+        }
+        if(barge.confirmed&&Date.now()-barge.confirmedAt>120000){
+          void disableHandsFree().then(()=>issue(new Error("A közbevágás túl hosszú volt.")));
+        }else if(!hands.busy&&hands.speechAt&&Date.now()-hands.speechAt>120000){
           hands.busy=true;
-          void disableHandsFree().then(()=>issue(new Error("A beszéd meghaladta a 120 másodpercet. Indítsd újra az automata módot.")));
+          void disableHandsFree().then(()=>issue(new Error("A beszéd meghaladta a 120 másodpercet.")));
         }
       },
-      onSpeechEnd:audio=>{void handleHandsSpeech(audio,generation);}
+      onSpeechEnd:audio=>{
+        if(!hands.enabled||hands.generation!==generation)return;
+        if(barge.confirmed){
+          barge.confirmed=false;barge.queuedAudio=audio;resetBargeCandidate();
+          // Wait for in-flight Claude/TTS loop to unwind before STT.
+          if(!hands.busy)consumeBargeAudio(generation);
+          return;
+        }
+        if(barge.monitoring){resetBargeCandidate();return;}
+        void handleHandsSpeech(audio,generation);
+      }
     });
     if(!hands.enabled||hands.generation!==generation){await vad.destroy();return;}
     hands.vad=vad;
@@ -511,7 +609,10 @@ async function handleHandsSpeech(audio,generation){
   }finally{
     hands.busy=false;
     if(hands.enabled&&hands.generation===generation){
-      try{await resumeHands(generation);}catch(error){issue(error);await disableHandsFree();}
+      if(barge.queuedAudio){consumeBargeAudio(generation);}
+      else if(!barge.confirmed){
+        try{await resumeHands(generation);}catch(error){issue(error);await disableHandsFree();}
+      }
     }
   }
 }
@@ -520,14 +621,26 @@ async function sendWithHalfDuplex(){
   const manage=hands.enabled&&!hands.busy;
   if(manage){hands.busy=true;await pauseHands();}
   try{await sendTranscript();}
-  finally{if(manage){hands.busy=false;await resumeHands(generation);}}
+  finally{
+    if(manage){
+      hands.busy=false;
+      if(barge.queuedAudio)consumeBargeAudio(generation);
+      else if(!barge.confirmed)await resumeHands(generation);
+    }
+  }
 }
 async function repeatWithHalfDuplex(){
   const generation=hands.generation;
   const manage=hands.enabled&&!hands.busy;
   if(manage){hands.busy=true;await pauseHands();}
   try{if(s.lastAnswer)await speak(s.lastAnswer);}
-  finally{if(manage){hands.busy=false;await resumeHands(generation);}}
+  finally{
+    if(manage){
+      hands.busy=false;
+      if(barge.queuedAudio)consumeBargeAudio(generation);
+      else if(!barge.confirmed)await resumeHands(generation);
+    }
+  }
 }
 
 async function toggleRecord(){
@@ -655,6 +768,7 @@ $("cueTest").addEventListener("click",()=>{
 });
 $("record").addEventListener("click",()=>{void toggleRecord();});
 $("hands").addEventListener("click",()=>{void toggleHandsFree();});
+$("barge").addEventListener("click",()=>{void toggleBarge().catch(issue);});
 $("send").addEventListener("click",()=>{void sendWithHalfDuplex().catch(issue);});
 $("stop").addEventListener("click",stopSpeech);
 $("repeat").addEventListener("click",()=>{void repeatWithHalfDuplex().catch(issue);});

@@ -13,7 +13,8 @@ A Claude Voice Bridge egy böngészőbővítmény a [claude.ai](https://claude.a
 - Magyar hangbevitel Gemini 3.5 Transcribe modellel.
 - A Claude válaszának felolvasása Gemini 3.8 TTS modellekkel.
 - Kézi mikrofonvezérlés vagy bekapcsolható, helyi **Silero VAD** beszédvég-érzékelés.
-- Becsukható, a jobb felső sarokban megjelenő Claude-stílusú panel, világos és sötét megjelenéssel.
+- Becsukható, a jobb felső sarokban megjelenő Claude-stílusú panel **kompakt, ikon alapú HUD-gombokkal**, világos és sötét megjelenéssel.
+- **Opcionális közbevágás (barge-in):** csak az automata mód melletti külön kapcsolóval aktiválható. Indításkor mindig inaktív. Közbevágásnál először lehalkítja, megerősített beszédre leállítja a felolvasást.
 - Két diszkrét hangjelzés a hallgatás és a feldolgozás kezdetéhez.
 - Zajküszöb és beszédvégi csend állítása csúszkával.
 - A hivatalos Google API-ból lekért modellek és hangok, tájékoztató díjakkal.
@@ -32,15 +33,18 @@ A mindenkori telepíthető ZIP a **[GitHub Releases](https://github.com/sanchomu
 
 1. A bővítmény beállításaiban add meg a [Google AI Studio](https://aistudio.google.com/apikey) felületén kapott saját Gemini API-kulcsodat.
 2. Nyisd meg bejelentkezve a `claude.ai` oldalt, és válassz vagy indíts beszélgetést.
-3. Kézi módban nyomd meg a **Beszéd indítása** gombot, majd a rögzítés végén ismét.
-4. Kéz nélküli módban kapcsold be az **Automata** módot. A Silero a beszéd utáni csendet érzékeli, a mikrofon a válasz felolvasása közben szünetel.
-5. Az oldalsó nyíllal a panel becsukható és kinyitható. A zajküszöb és a csendidő közvetlenül a panelen is állítható.
+3. Kézi módban koppints a **mikrofonikonra**, majd a rögzítés végén ismét.
+4. Kéz nélküli módban kapcsold be a **hullámikonos automata módot**. A felolvasás közben alapból szünetel a mikrofon.
+5. Ha közbe szeretnél vágni, külön kapcsold be a **közbevágás ikont**. A két kapcsoló aktív/inaktív állapotát a megkülönböztetett színek és a panel rövid állapotsora mutatja. Bekapcsolás csak szándékos érintésre történik.
+6. Az oldalsó nyíllal a panel becsukható és kinyitható. A zajküszöb és a csendidő közvetlenül a panelen is állítható.
 
 A **Beállítások → Beszédstílus** sor jobb oldalán található lejátszás ikon az aktuális stílus szövegével készít TTS-tesztet. Amíg a gomb aktív, újbóli megnyomással megszakíthatod a próbát. A teszt a Google API-használatba beleszámít.
 
 ## Adatvédelem és korlátok
 
 A Gemini API-kulcsot a bővítmény helyben, elkülönített tárolóban kezeli, nem része a forráskódnak. A hangfelvétel és a felolvasásra elküldött szöveg a Google Gemini szolgáltatásához kerül. A Claude beszélgetése a bejelentkezett webes munkamenetben történik. Érzékeny adatokkal a prototípust ne használd.
+
+**Fontos a közbevágásról:** a Silero VAD nem tudja garantáltan megkülönböztetni a telefon hangszórójából visszahallatszó beszédet a te hangodtól. A bővítmény akusztikus visszhangszűrést (AEC) és rövid megerősítő figyelést használ, de hangszóróval téves megszakítás lehetséges. Fülhallgatóval várható a jobb eredmény. Az új mód Quettán még eszköztesztelésre vár.
 
 A bővítmény nem hivatalos Anthropic- vagy Google-termék. A Claude felületének változása megszakíthatja a működését. Az Android/Quetta automatikus VAD és a háttérben működés nem minden készüléken igazolt, vezetés közbeni használatra nem hitelesített. A helyi keretek **nem garantált számlázási limitek**.
 
