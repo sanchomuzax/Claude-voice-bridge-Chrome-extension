@@ -92,3 +92,15 @@ test("empty Edge recording never reaches Gemini STT",async()=>{
  await assert.rejects(context.process("audio/webm"),/nem adott használható hangadatot/);
  assert.equal(called,0);
 });
+
+
+test("GET_SETTINGS retries an empty Edge worker response safely",async()=>{
+ let calls=0;
+ const message=makeMessaging((_payload,cb)=>{
+   calls++;
+   if(calls===1)cb(undefined);
+   else cb({ok:true,configured:true,settings:{}});
+ });
+ assert.equal((await message("GET_SETTINGS")).configured,true);
+ assert.equal(calls,2);
+});
