@@ -94,6 +94,7 @@ jobs:
           fi
           gh release view "$TAG" --json assets --jq '.assets[].name' | grep -Fx "$ZIP"
           gh release view "$TAG" --json assets --jq '.assets[].name' | grep -Fx "$ZIP.sha256"
+          echo "Verified published release assets for $TAG"
           while IFS="|" read -r OLD SHA DESC; do
             FILE="Claude-Voice-Bridge-$OLD.zip"
             if [[ -s "$FILE" ]] && ! gh release view "$OLD" >/dev/null 2>&1; then
