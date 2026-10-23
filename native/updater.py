@@ -29,7 +29,8 @@ STATIC_FILES = {
     "vad-codec.js", "panel-ui.js", "selectors.json",
     "options.html", "options.js", "popup.html", "popup.js", "popup.css",
     "ui.css", "dist/vad-bundle.js", "vendor/silero_vad_v5.onnx",
-    "vendor/vad.worklet.bundle.min.js"
+    "vendor/vad.worklet.bundle.min.js", "native/updater.py",
+    "native/install-windows.ps1"
 }
 USER_AGENT = "ClaudeVoiceBridgeUpdater/1.0"
 
