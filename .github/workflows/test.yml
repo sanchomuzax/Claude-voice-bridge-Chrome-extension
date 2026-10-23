@@ -55,6 +55,8 @@ jobs:
           VERSION=$(node -p "require('./package.json').version")
           ZIP="Claude-Voice-Bridge-v$VERSION.zip"
           unzip -t "$ZIP"
+          sha256sum "$ZIP" > "$ZIP.sha256"
+          test -s "$ZIP.sha256"
           test -s vendor/silero_vad_v5.onnx
           test -s vendor/vad.worklet.bundle.min.js
       - uses: actions/upload-artifact@v4
@@ -73,7 +75,7 @@ jobs:
           TAG="v$VERSION"
           NOTES=".github/release-notes/$TAG.md"
           if ! gh release view "$TAG" >/dev/null 2>&1; then
-            gh release create "$TAG" "$ZIP" --target "$GITHUB_SHA" --title "Claude Voice Bridge $TAG" --notes-file "$NOTES" --latest
+            gh release create "$TAG" "$ZIP" "$ZIP.sha256" --target "$GITHUB_SHA" --title "Claude Voice Bridge $TAG" --notes-file "$NOTES" --latest
           fi
           while IFS="|" read -r OLD SHA DESC; do
             FILE="Claude-Voice-Bridge-$OLD.zip"
