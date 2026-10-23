@@ -10,6 +10,8 @@ const s={phase:"idle",selectors:{},configured:false,sendMode:"auto",stream:null,
  lastAnswer:"",audio:null,audioUrl:null,playToken:0,rate:1,lastSpoken:"",
  activeWait:null,audioEnd:null,fallbackEnd:null,cuesEnabled:true};
 const hands={enabled:false,starting:false,vad:null,busy:false,generation:0,silenceMs:1200,speechAt:0,threshold:0.62};
+// Barge-in consent is runtime-only and never restored automatically.
+const barge={enabled:false,monitoring:false,candidateAt:0,highFrames:0,confirmed:false,confirmedAt:0,queuedAudio:null};
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
 const message=(type,data={})=>new Promise((resolve,reject)=>{
   chrome.runtime.sendMessage({type,...data},response=>{
@@ -33,6 +35,9 @@ function setStatus(text,phase=s.phase){
   $("hands").textContent=hands.enabled?"Automata: be":"Automata: ki";
   $("hands").disabled=hands.starting;
   $("hands").setAttribute("aria-pressed",String(hands.enabled));
+  $("barge").textContent=barge.enabled?"Közbevágás: be":"Közbevágás: ki";
+  $("barge").disabled=!hands.enabled||hands.starting;
+  $("barge").setAttribute("aria-pressed",String(barge.enabled));
   $("send").disabled=!s.pending;
   $("stop").disabled=phase!=="playing";
   $("repeat").disabled=!s.lastAnswer||phase==="recording";
@@ -395,11 +400,41 @@ async function handleCommand(command){
  * The valid PCM segment is transcribed only after the end-of-speech callback.
  * The VAD stream is paused throughout STT, Claude response and TTS (half-duplex).
  */
+function resetBargeCandidate(){
+  barge.candidateAt=0;barge.highFrames=0;
+  if(s.audio)s.audio.volume=1;
+}
+async function armBargeDuringTts(){
+  if(!hands.enabled||!barge.enabled||!hands.busy||!hands.vad||s.phase!=="playing")return;
+  barge.monitoring=true;resetBargeCandidate();
+  try{await hands.vad.start();}
+  catch(error){barge.monitoring=false;issue(new Error("Közbevágás mikrofonhiba: "+String(error.message||error)));}
+}
+async function disarmBargeDuringTts(){
+  if(!barge.monitoring)return;
+  barge.monitoring=false;resetBargeCandidate();
+  if(hands.vad&&hands.busy)await hands.vad.pause();
+}
+function consumeBargeAudio(generation){
+  if(!hands.enabled||generation!==hands.generation){barge.queuedAudio=null;return;}
+  if(hands.busy||!barge.queuedAudio)return;
+  const audio=barge.queuedAudio;barge.queuedAudio=null;
+  void handleHandsSpeech(audio,generation);
+}
+async function toggleBarge(){
+  if(!hands.enabled)return;
+  barge.enabled=!barge.enabled;
+  if(!barge.enabled){
+    if(barge.monitoring)await disarmBargeDuringTts();
+    barge.confirmed=false;barge.queuedAudio=null;resetBargeCandidate();
+  }else if(s.phase==="playing"&&hands.busy)await armBargeDuringTts();
+  setStatus(barge.enabled?"Közbevágás aktív a felolvasás alatt.":"Közbevágás kikapcsolva. Half-duplex mód.",s.phase);
+}
 async function pauseHands(){
   if(hands.vad)await hands.vad.pause();
 }
 async function resumeHands(generation=hands.generation){
-  if(!hands.enabled||hands.generation!==generation||hands.busy||s.pending&&s.sendMode!=="confirm")return;
+  if(!hands.enabled||hands.generation!==generation||hands.busy||barge.confirmed||barge.queuedAudio||s.pending&&s.sendMode!=="confirm")return;
   if(!hands.vad)return;
   await hands.vad.start();
   if(hands.enabled&&hands.generation===generation&&!hands.busy){
@@ -409,6 +444,8 @@ async function resumeHands(generation=hands.generation){
   }
 }
 async function disableHandsFree(){
+  barge.enabled=false;barge.monitoring=false;barge.confirmed=false;
+  barge.queuedAudio=null;resetBargeCandidate();
   hands.enabled=false;
   hands.generation++;
   hands.speechAt=0;
@@ -655,6 +692,7 @@ $("cueTest").addEventListener("click",()=>{
 });
 $("record").addEventListener("click",()=>{void toggleRecord();});
 $("hands").addEventListener("click",()=>{void toggleHandsFree();});
+$("barge").addEventListener("click",()=>{void toggleBarge().catch(issue);});
 $("send").addEventListener("click",()=>{void sendWithHalfDuplex().catch(issue);});
 $("stop").addEventListener("click",stopSpeech);
 $("repeat").addEventListener("click",()=>{void repeatWithHalfDuplex().catch(issue);});
