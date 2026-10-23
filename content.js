@@ -13,7 +13,53 @@ const hands={enabled:false,starting:false,vad:null,busy:false,generation:0,silen
 // Barge-in consent is runtime-only and never restored automatically.
 const barge={enabled:false,monitoring:false,candidateAt:0,highFrames:0,confirmed:false,confirmedAt:0,queuedAudio:null};
 const sleep=ms=>new Promise(resolve=>setTimeout(resolve,ms));
+/* Long Gemini work uses its own Port. Both ends exchange keep-alives
+ * while the server processes audio. Port disconnection is reported explicitly
+ * but NEVER causes an automatic replay (which could double bill STT/TTS).
+ */
+function longAudioMessage(type,data){
+  return new Promise((resolve,reject)=>{
+    let port,timer=null,timeout=null,finished=false,accepted=false;
+    function finish(error,result){
+      if(finished)return;
+      finished=true;
+      if(timer!==null)clearInterval(timer);
+      if(timeout!==null)clearTimeout(timeout);
+      try{port?.disconnect();}catch{}
+      if(error)reject(error);else resolve(result);
+    }
+    try{
+      port=chrome.runtime.connect({name:"cvb-audio-task"});
+      port.onMessage.addListener(reply=>{
+        if(reply?.type==="ACCEPTED"){accepted=true;return;}
+        if(reply?.type==="PONG")return;
+        if(reply?.type!=="RESULT")return;
+        if(reply.ok)finish(null,reply);
+        else finish(new Error(reply.error||"A Gemini háttérfolyamat hibát jelzett."));
+      });
+      port.onDisconnect.addListener(()=>{
+        if(finished)return;
+        const nativeError=chrome.runtime.lastError?.message||"A Port kapcsolat megszakadt.";
+        finish(new Error("Az Edge hangfeldolgozó háttérkapcsolata megszakadt "+
+          (accepted?"a feldolgozás közben.":"a kérés fogadása előtt.")+
+          " Az STT/TTS kérést nem ismétlem automatikusan. ("+nativeError+")"));
+      });
+      // Chrome 114+ requires actual Port traffic, not merely an open Port.
+      timer=setInterval(()=>{
+        if(!finished)try{port.postMessage({type:"PING"});}catch(error){
+          finish(new Error("A Gemini Port-életjel megszakadt: "+String(error?.message||error)));
+        }
+      },20000);
+      // Never hang indefinitely if the extension drops a RESULT silently.
+      timeout=setTimeout(()=>finish(new Error("A Gemini hangfeldolgozás 4 perc után sem válaszolt. Nem indítok automatikus újrakérést.")),240000);
+      port.postMessage({type:"REQUEST",task:type,data});
+    }catch(error){
+      finish(new Error("Az Edge hangfeldolgozó Port-kapcsolata nem indítható: "+String(error?.message||error)));
+    }
+  });
+}
 const message=async(type,data={})=>{
+  if(type==="TRANSCRIBE"||type==="SYNTHESIZE")return longAudioMessage(type,data);
   // GET requests may be retried across an Edge/Chromium MV3 worker wake-up.
   // Never replay TRANSCRIBE, SYNTHESIZE or other charged/mutating requests:
   // the worker may have received them before the reply channel disappeared.
