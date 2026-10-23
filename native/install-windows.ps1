@@ -40,7 +40,7 @@ if ($python) {
 $pythonPath = $python.Source
 $runner = Join-Path $install "updater.cmd"
 $cmdText = "@echo off" + [Environment]::NewLine +
-    '"' + $pythonPath + '" ' + $pythonArgs + ' "%~dp0updater.py"' + [Environment]::NewLine
+    '"' + $pythonPath + '" ' + $pythonArgs + ' "%~dp0updater.py" %*' + [Environment]::NewLine
 [System.IO.File]::WriteAllText($runner, $cmdText, [System.Text.Encoding]::ASCII)
 
 $origin = "chrome-extension://$ExtensionId/"
