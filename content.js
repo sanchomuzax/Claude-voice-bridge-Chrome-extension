@@ -81,8 +81,12 @@ function assistantText(){
   const nodes=(latest.matches(selectors)?[latest]:[]).concat([...latest.querySelectorAll(selectors)]);
   const roots=nodes.filter(node=>!nodes.some(parent=>parent!==node&&parent.contains(node)) &&
     !node.closest("[data-testid*='tool'],[data-testid*='approval'],[data-testid*='permission'],[role='dialog']"));
-  // Crucial: no fallback to a raw assistant container. In an external-tool
-  // turn that would announce "Need your input" and never read the actual answer.
+  // Some Claude layouts render an answer directly inside .font-claude-response
+  // without a .standard-markdown child. Only this explicit prose element may
+  // be used as fallback; never a generic tool/status container.
+  if(!roots.length&&latest.matches(".font-claude-response,.font-claude-message") &&
+    !latest.closest("[data-testid*='tool'],[data-testid*='permission'],[data-testid*='approval']") &&
+    !CVB.isToolStatus(latest.textContent||""))roots.push(latest);
   if(!roots.length)return "";
   const forbidden="button,script,style,pre,code,svg,.sr-only,[hidden],[aria-hidden='true'],[data-testid*='thinking'],[data-testid*='tool'],[data-testid*='permission'],[data-testid*='approval'],[aria-label*='Copy']";
   function rendered(node){
@@ -93,7 +97,8 @@ function assistantText(){
     const text=[...node.childNodes].map(rendered).join("");
     return /^(P|DIV|SECTION|H1|H2|H3|H4|LI|BLOCKQUOTE|TR)$/.test(tag)?text+"\n":text;
   }
-  return CVB.cleanForSpeech(roots.map(rendered).join("\n"));
+  const answer=CVB.cleanForSpeech(roots.map(rendered).join("\n"));
+  return CVB.isToolStatus(answer)?"":answer;
 }
 function pendingToolApproval(){
   const last=assistantElements().at(-1);
