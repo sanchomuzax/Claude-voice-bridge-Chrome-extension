@@ -29,15 +29,24 @@ shadow.innerHTML=globalThis.CVBPanel;
 (document.body||document.documentElement).appendChild(wrapper);
 const $=id=>shadow.getElementById(id);
 function setStatus(text,phase=s.phase){
-  s.phase=phase; $("status").textContent=text;
-  $("record").textContent=phase==="recording"?"Felvétel lezárása":"Beszéd indítása";
+  s.phase=phase;$("status").textContent=text;
+  const recordLabel=phase==="recording"?"Felvétel lezárása":"Beszéd indítása";
+  for(const [id,label] of Object.entries({
+    record:recordLabel,
+    hands:hands.enabled?"Automata mód aktív. Koppints a kikapcsoláshoz.":"Automata mód inaktív. Koppints a bekapcsoláshoz.",
+    barge:barge.enabled?"Közbevágás aktív. Koppints a kikapcsoláshoz.":
+      hands.enabled?"Közbevágás inaktív. Koppints a bekapcsoláshoz.":"Közbevágás nem aktív. Előbb az automata módot kapcsold be.",
+    send:"Leirat elküldése",stop:"Felolvasás leállítása",
+    repeat:"Válasz újraolvasása",settings:"Beállítások"
+  })){
+    const button=$(id);button.title=label;button.setAttribute("aria-label",label);
+  }
   $("record").disabled=hands.enabled||hands.starting||["transcribing","sending","waiting"].includes(phase);
-  $("hands").textContent=hands.enabled?"Automata: be":"Automata: ki";
   $("hands").disabled=hands.starting;
   $("hands").setAttribute("aria-pressed",String(hands.enabled));
-  $("barge").textContent=barge.enabled?"Közbevágás: be":"Közbevágás: ki";
   $("barge").disabled=!hands.enabled||hands.starting;
   $("barge").setAttribute("aria-pressed",String(barge.enabled));
+  $("modeState").textContent="Automata: "+(hands.enabled?"aktív":"inaktív")+" · Közbevágás: "+(barge.enabled?"aktív":"inaktív");
   $("send").disabled=!s.pending;
   $("stop").disabled=phase!=="playing";
   $("repeat").disabled=!s.lastAnswer||phase==="recording";
