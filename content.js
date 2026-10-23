@@ -374,7 +374,7 @@ async function speak(raw){
       try{
         output=await CVB.untilCancelled(message("SYNTHESIZE",{text:parts[i]}),controller.signal);
       }catch(error){
-        stopWaitChime();
+        stopWaitChime(token);
         if(controller.signal.aborted||token!==s.playToken)return;
         // Restore half-duplex during native TTS fallback.
         if(barge.monitoring)await disarmBargeDuringTts();
@@ -382,7 +382,7 @@ async function speak(raw){
         await fallbackSpeak(parts[i],token);
         continue;
       }finally{
-        stopWaitChime();
+        stopWaitChime(token);
       }
       if(!output||controller.signal.aborted||token!==s.playToken)return;
       setStatus("Felolvasás ("+(i+1)+"/"+parts.length+")…","playing");
@@ -404,7 +404,7 @@ async function speak(raw){
     if(token===s.playToken&&!controller.signal.aborted)
       setStatus("Felolvasás befejezve.","idle");
   }finally{
-    stopWaitChime();
+    stopWaitChime(token);
     if(barge.monitoring)await disarmBargeDuringTts();
     if(s.speechController===controller){
       s.speechController=null;
@@ -764,6 +764,99 @@ function playCue(type){
   }
   if(cueContext?.state==="running")webAudioCue(type);
 }
+/* A faint four-note "ti-din-ti-dim" progress chime, only while Gemini
+ * synthesizes the NEXT paragraph. First notes after 0.8 s; every 3.2 s
+ * thereafter. It has a dedicated Audio instance, so it cannot take over
+ * Claude's TTS player or the one-off listen/process beeps.
+ */
+const waitChime={token:null,delay:null,interval:null,player:null,url:null};
+function makeWaitChimeWav(){
+  if(waitChime.url)return waitChime.url;
+  const sampleRate=22050,noteLength=0.087,gap=0.035;
+  const notes=[665,820,720,555];
+  const seconds=notes.length*(noteLength+gap)+0.05;
+  const count=Math.round(seconds*sampleRate);
+  const bytes=new Uint8Array(44+count*2),dv=new DataView(bytes.buffer);
+  const label=(start,str)=>{for(let i=0;i<str.length;i++)bytes[start+i]=str.charCodeAt(i);};
+  label(0,"RIFF");dv.setUint32(4,bytes.length-8,true);
+  label(8,"WAVE");label(12,"fmt ");dv.setUint32(16,16,true);
+  dv.setUint16(20,1,true);dv.setUint16(22,1,true);
+  dv.setUint32(24,sampleRate,true);dv.setUint32(28,sampleRate*2,true);
+  dv.setUint16(32,2,true);dv.setUint16(34,16,true);
+  label(36,"data");dv.setUint32(40,count*2,true);
+  for(let i=0;i<count;i++){
+    const t=i/sampleRate;
+    const idx=Math.floor(t/(noteLength+gap));
+    let value=0;
+    if(idx<notes.length){
+      const local=t-idx*(noteLength+gap);
+      if(local>=0&&local<noteLength){
+        const envelope=Math.sin(Math.PI*local/noteLength)**2;
+        value=0.075*envelope*Math.sin(2*Math.PI*notes[idx]*local);
+      }
+    }
+    dv.setInt16(44+i*2,Math.round(value*32767),true);
+  }
+  waitChime.url=URL.createObjectURL(new Blob([bytes],{type:"audio/wav"}));
+  return waitChime.url;
+}
+function playWaitChime(token,signal){
+  if(waitChime.token!==token||signal.aborted||!s.speechActive||!s.cuesEnabled)return;
+  try{
+    waitChime.player ||= new Audio();
+    const player=waitChime.player;
+    player.volume=0.28;  // PCM peak 7.5% * player volume 28% => ~2% peak.
+    player.pause();
+    player.src=makeWaitChimeWav();
+    player.currentTime=0;
+    const play=player.play();
+    play?.catch(async()=>{
+      if(waitChime.token!==token||signal.aborted)return;
+      // Fall back to WebAudio if Quetta blocks a new media player.
+      try{
+        primeAudio();await cueContext?.resume();
+        if(cueContext?.state!=="running")return;
+        const start=cueContext.currentTime+0.02;
+        for(const [i,freq] of [665,820,720,555].entries()){
+          if(waitChime.token!==token)return;
+          const at=start+i*0.122;
+          const o=cueContext.createOscillator(),g=cueContext.createGain();
+          o.type="sine";o.frequency.value=freq;
+          g.gain.setValueAtTime(0.0001,at);
+          g.gain.linearRampToValueAtTime(0.016,at+0.025);
+          g.gain.exponentialRampToValueAtTime(0.0001,at+0.085);
+          o.connect(g).connect(cueContext.destination);
+          o.start(at);o.stop(at+0.09);
+          o.onended=()=>{o.disconnect();g.disconnect();};
+        }
+      }catch{}
+    });
+  }catch{}
+}
+function stopWaitChime(owner=null){
+  // Ignore stale cleanup from a previous speech run.
+  if(owner!==null&&waitChime.token!==owner)return;
+  waitChime.token=null;
+  if(waitChime.delay!==null){clearTimeout(waitChime.delay);waitChime.delay=null;}
+  if(waitChime.interval!==null){clearInterval(waitChime.interval);waitChime.interval=null;}
+  if(waitChime.player){
+    waitChime.player.pause();
+    waitChime.player.removeAttribute("src");
+    waitChime.player.load();
+  }
+}
+function startWaitChime(token,signal){
+  stopWaitChime();
+  if(!s.cuesEnabled||signal.aborted)return;
+  waitChime.token=token;
+  waitChime.delay=setTimeout(()=>{
+    waitChime.delay=null;
+    if(waitChime.token!==token||signal.aborted)return;
+    playWaitChime(token,signal);
+    waitChime.interval=setInterval(()=>playWaitChime(token,signal),3200);
+  },800);
+}
+
 function applyCollapsed(value){
   wrapper.dataset.collapsed=String(value);
   // Quetta Android renders the Claude conversation toolbar directly below
@@ -828,6 +921,8 @@ chrome.runtime.onMessage.addListener((request,sender,reply)=>{
   if(request?.type==="STOP_SPEECH"){stopSpeech();reply({ok:true});}
 });
 window.addEventListener("pagehide",()=>{
+  stopSpeech();
+  if(waitChime.url)URL.revokeObjectURL(waitChime.url);
   void disableHandsFree();releaseMicrophone();clearAudio();
   cuePlayer?.pause();
   for(const url of cueUrls.values())URL.revokeObjectURL(url);
