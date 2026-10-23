@@ -38,6 +38,10 @@ def allowed_file(name):
     """Only files from the known, installable browser-extension package."""
     if name in STATIC_FILES:
         return True
+    if bool(re.fullmatch(r"[A-Za-z][A-Za-z0-9_.-]*\.(?:js|css|html|json)", name)):
+        return True
+    if bool(re.fullmatch(r"dist/[A-Za-z][A-Za-z0-9_.-]*\.js", name)):
+        return True
     p = PurePosixPath(name)
     return (len(p.parts) == 2 and p.parts[0] == "vendor"
             and bool(re.fullmatch(r"[A-Za-z0-9_.-]+\.(wasm|mjs)", p.parts[1])))
@@ -102,7 +106,7 @@ def stage_release(zip_path, stage_dir, version):
             if info.is_dir():
                 continue
             pp = PurePosixPath(name)
-            if (not allowed_file(name) or ".." in pp.parts
+            if (not allowed_file(name) or str(pp) != name or ".." in pp.parts
                     or name.startswith("/") or "\\" in name or ":" in name):
                 raise ValueError("Tiltott útvonal a ZIP-ben: " + name)
             if name.casefold() in seen:
@@ -130,7 +134,7 @@ def install_release(extension_dir, version):
     current_file = target / "manifest.json"
     if not current_file.is_file():
         raise ValueError("Az előre beállított mappa nem kicsomagolt bővítmény.")
-    existing = json.loads(current_file.read_text(encoding="utf-8"))
+    existing = json.loads(current_file.read_text(encoding="utf-8-sig"))
     if existing.get("name") != "Claude Voice Bridge":
         raise ValueError("A telepítési mappa nem Claude Voice Bridge.")
     current = existing.get("version", "")
@@ -156,7 +160,8 @@ def install_release(extension_dir, version):
         backup.mkdir()
         replaced = []
         try:
-            for name in paths:
+            # Update manifest last, after all implementation assets are installed.
+            for name in sorted(paths, key=lambda item: item == "manifest.json"):
                 destination = target.joinpath(*PurePosixPath(name).parts)
                 if destination.is_symlink():
                     raise ValueError("Szimbolikus link a telepítési célhelyen: " + name)
