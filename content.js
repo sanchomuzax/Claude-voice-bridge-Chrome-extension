@@ -681,6 +681,7 @@ async function disableHandsFree(){
   setStatus("Automata mód kikapcsolva. A kézi felvétel továbbra is működik.","idle");
 }
 async function enableHandsFree(){
+  await reloadBridgeSettings();
   if(!s.configured)throw new Error("Előbb add meg a Gemini API-kulcsot.");
   if(["recording","transcribing","waiting","playing"].includes(s.phase)||s.pending)
     throw new Error("Előbb fejezd be a folyamatban lévő kört.");
@@ -693,9 +694,12 @@ async function enableHandsFree(){
     const vad=await globalThis.CVBSilero.MicVAD.new({
       model:"v5",
       processorType:"auto",
-      getStream:()=>navigator.mediaDevices.getUserMedia({audio:{
-        channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true
-      }}),
+      getStream:async()=>{
+        try{return await navigator.mediaDevices.getUserMedia({audio:{
+          channelCount:1,echoCancellation:true,noiseSuppression:true,autoGainControl:true
+        }});}
+        catch(error){throw describeMicError(error);}
+      },
       startOnLoad:false,
       baseAssetPath:chrome.runtime.getURL("vendor/"),
       onnxWASMBasePath:chrome.runtime.getURL("vendor/"),
@@ -787,7 +791,7 @@ async function handleHandsSpeech(audio,generation){
     const seconds=audio.length/globalThis.CVBWav.SAMPLE_RATE;
     if(seconds<0.5){setStatus("Túl rövid beszéd. Folytatom a figyelést.","idle");return;}
     if(seconds>122)throw new Error("A hang meghaladta a 120 másodperces keretet.");
-    setStatus("Gemini STT: a beszéd átirata készül…","transcribing");
+    setStatus("Silero beszédvég érzékelve: "+seconds.toFixed(1)+" mp hang. Gemini STT indul…","transcribing");
     const data=globalThis.CVBWav.pcm16WavBase64(audio);
     const {transcript}=await transcribeWithChime({duration:Math.min(seconds,120),mime:"audio/wav",data});
     if(!hands.enabled||hands.generation!==generation)return;
