@@ -90,6 +90,11 @@ const wrapper=document.createElement("div");
 wrapper.id="claude-voice-bridge";
 wrapper.style.cssText="position:fixed;z-index:2147483646;right:0;top:calc(env(safe-area-inset-top, 0px) + 8px);max-width:calc(100vw - 44px);pointer-events:none";
 wrapper.style.fontFamily=getComputedStyle(document.body).fontFamily;
+// Stay invisible until the saved collapsed/expanded state is known, so a new
+// tab never flashes the opposite state. A slow worker wake-up still reveals it.
+wrapper.style.visibility="hidden";
+const revealTimer=setTimeout(revealPanel,1500);
+function revealPanel(){clearTimeout(revealTimer);wrapper.style.visibility="";}
 const shadow=wrapper.attachShadow({mode:"closed"});
 shadow.innerHTML=globalThis.CVBPanel;
 (document.body||document.documentElement).appendChild(wrapper);
@@ -216,26 +221,32 @@ async function restartVadIfNeeded(){
     return false;
   }finally{vadRestarting=false;}
 }
-function applyBridgeConfig(cfg){
-  const settings=cfg.settings||{};
-  const previousConfigured=s.configured;
+function applyVadSettings(threshold,silenceMs){
   const priorThreshold=hands.threshold,priorSilence=hands.silenceMs;
-  s.configured=cfg.configured;
-  s.sendMode=settings.sendMode||"auto";
-  hands.silenceMs=Math.max(700,Math.min(2500,Number(settings.silenceMs)||1200));
-  hands.threshold=Math.max(0.4,Math.min(0.9,Number(settings.vadThreshold)||0.62));
-  s.cuesEnabled=settings.soundCues!==false;
+  hands.silenceMs=Math.max(700,Math.min(2500,Number(silenceMs)||1200));
+  hands.threshold=Math.max(0.4,Math.min(0.9,Number(threshold)||0.62));
   $("noise").value=String(hands.threshold);
   $("silence").value=String(hands.silenceMs);
   showSliderValues();
-  applyCollapsed(Boolean(settings.panelCollapsed));
-  if(!s.cuesEnabled)stopWaitChime();
   if(hands.enabled&&(priorThreshold!==hands.threshold||priorSilence!==hands.silenceMs)){
     vadRestartPending=true;
     // If speech is currently being recorded or processed, resumeHands()
     // will apply the new parameters after the current turn finishes.
     if(!hands.busy&&!barge.confirmed)void restartVadIfNeeded();
   }
+}
+// Collapse clicks still being saved. A settings reply read before the click
+// must not reopen or re-close the panel; the storage change triggers a fresh one.
+let collapseWrites=0;
+function applyBridgeConfig(cfg){
+  const settings=cfg.settings||{};
+  const previousConfigured=s.configured;
+  s.configured=cfg.configured;
+  s.sendMode=settings.sendMode||"auto";
+  s.cuesEnabled=settings.soundCues!==false;
+  applyVadSettings(settings.vadThreshold,settings.silenceMs);
+  if(!collapseWrites)applyCollapsed(Boolean(settings.panelCollapsed));
+  if(!s.cuesEnabled)stopWaitChime();
   if(!previousConfigured&&s.configured&&s.phase==="idle")
     setStatus("Gemini kapcsolat beállítva. Indíthatod a beszédet.","idle");
   else setStatus($("status").textContent,s.phase);
@@ -270,7 +281,7 @@ function startSettingsSync(){
 }
 async function init(){
   try{
-    await reloadBridgeSettings();
+    try{await reloadBridgeSettings();}finally{revealPanel();}
     s.selectors=await fetch(chrome.runtime.getURL("selectors.json")).then(r=>r.json());
     if(!s.configured)setStatus("A Gemini API-kulcs nincs beállítva. Nyisd meg a Beállítások menüt.","idle");
     else if(!editor())setStatus("A Claude szerkesztő nem található. Nyiss meg egy beszélgetést.","idle");
@@ -734,6 +745,9 @@ async function enableHandsFree(){
     throw new Error("Előbb fejezd be a folyamatban lévő kört.");
   if(!globalThis.CVBSilero?.MicVAD||!globalThis.CVBWav?.pcm16WavBase64)
     throw new Error("Hiányzik a helyi Silero modell/bundle. Telepítsd a teljes v0.2.0 ZIP-et.");
+  // A previous run may have stopped with busy set (120 s overrun). No turn is
+  // active here (checked above), so start the new run from a clean state.
+  hands.busy=false;
   hands.enabled=true;
   const generation=++hands.generation;
   await lockScreen();
@@ -1097,19 +1111,19 @@ function showSliderValues(){
   $("silenceValue").textContent=$("silence").value+" ms";
 }
 async function updateVadControls(){
-  const previous=hands.enabled;
-  const threshold=Number($("noise").value);
-  const silence=Number($("silence").value);
-  if(previous)await disableHandsFree();
-  const saved=await message("UPDATE_UI_SETTINGS",{values:{vadThreshold:threshold,silenceMs:silence}});
-  hands.threshold=saved.settings.vadThreshold;
-  hands.silenceMs=saved.settings.silenceMs;
-  if(previous)await enableHandsFree();
+  const saved=await message("UPDATE_UI_SETTINGS",{values:{
+    vadThreshold:Number($("noise").value),silenceMs:Number($("silence").value)
+  }});
+  applyVadSettings(saved.settings.vadThreshold,saved.settings.silenceMs);
 }
 $("toggle").addEventListener("click",()=>{
   const closed=wrapper.dataset.collapsed!=="true";
   applyCollapsed(closed);
-  void message("UPDATE_UI_SETTINGS",{values:{panelCollapsed:closed}}).catch(issue);
+  // Persist for every later tab and browser start.
+  collapseWrites++;
+  void message("UPDATE_UI_SETTINGS",{values:{panelCollapsed:closed}})
+    .catch(error=>{issue(error);})
+    .finally(()=>{collapseWrites--;});
 });
 for(const id of ["noise","silence"]){
   $(id).addEventListener("input",showSliderValues);
@@ -1141,11 +1155,17 @@ chrome.runtime.onMessage.addListener((request,sender,reply)=>{
   if(request?.type==="TOGGLE_RECORD"){void toggleRecord();reply({ok:true});}
   if(request?.type==="STOP_SPEECH"){stopSpeech();reply({ok:true});}
 });
-const disconnectSettingsSync=startSettingsSync();
+let disconnectSettingsSync=startSettingsSync();
+window.addEventListener("pageshow",event=>{
+  // Back/forward cache restore: pagehide closed the settings Port.
+  if(!event.persisted)return;
+  disconnectSettingsSync=startSettingsSync();
+  void reloadBridgeSettings().catch(issue);
+});
 window.addEventListener("pagehide",()=>{
   disconnectSettingsSync();
   stopSpeech();
-  if(waitChime.url)URL.revokeObjectURL(waitChime.url);
+  if(waitChime.url){URL.revokeObjectURL(waitChime.url);waitChime.url=null;}
   void disableHandsFree();releaseMicrophone();clearAudio();
   cuePlayer?.pause();
   for(const url of cueUrls.values())URL.revokeObjectURL(url);

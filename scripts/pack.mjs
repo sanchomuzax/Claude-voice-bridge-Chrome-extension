@@ -1,7 +1,7 @@
 import { execFileSync } from "node:child_process";
 import { existsSync, rmSync } from "node:fs";
 
-const output = "Claude-Voice-Bridge-v0.5.18.zip";
+const output = "Claude-Voice-Bridge-v0.5.19.zip";
 const files = [
   "update.bat","manifest.json","background.js","content.js","shared.js","vad-codec.js","panel-ui.js",
   "selectors.json","options.html","options.js","popup.html","popup.js","popup.css","ui.css",
